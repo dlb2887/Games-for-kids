@@ -153,6 +153,7 @@
   .acc{position:absolute; display:none; line-height:1; pointer-events:auto; cursor:grab;
     touch-action:none; user-select:none; -webkit-user-drag:none;
     font-size:clamp(34px,9vw,52px); filter:drop-shadow(0 3px 4px rgba(0,0,0,.2)); z-index:3;}
+  .acc.big{font-size:clamp(70px,20vw,120px);}
   .acc.on{display:block; animation:plop .3s ease both;}
   .acc.dragging{cursor:grabbing; animation:none; filter:drop-shadow(0 7px 8px rgba(0,0,0,.3)); z-index:6;}
   @keyframes plop{from{transform:scale(.2) translateY(-10px); opacity:0;}to{opacity:1;}}
@@ -560,9 +561,9 @@ const ACCESSORIES = [
   {slot:'bow',     emoji:'🎀', name:'a bow',        dx:58, dy:10},
   {slot:'glasses', emoji:'🕶️', name:'sunglasses',   dx:36, dy:30},
   {slot:'flower',  emoji:'🌸', name:'a flower',     dx:8,  dy:38},
-  {slot:'dress',   emoji:'👗', name:'a dress',      dx:38, dy:54},
-  {slot:'sari',    emoji:'🥻', name:'a fancy dress',dx:60, dy:54},
-  {slot:'top',     emoji:'👚', name:'a shirt',      dx:12, dy:60}
+  {slot:'dress',   emoji:'👗', name:'a dress',      dx:30, dy:42, big:true},
+  {slot:'sari',    emoji:'🥻', name:'a fancy dress',dx:50, dy:44, big:true},
+  {slot:'top',     emoji:'👚', name:'a shirt',      dx:12, dy:46, big:true}
 ];
 const FALLBACK_WINGS = ['#ff8fb1','#ffd1e3'];
 let photoIdx = 0, photoMode = true, currentFilter = '', activeAcc = new Set(), playBuilt = false;
@@ -614,7 +615,7 @@ function makeDraggable(el){
 }
 function makeAccEl(a){
   const el = document.createElement('div');
-  el.className='acc on'; el.dataset.slot=a.slot; el.textContent=a.emoji;
+  el.className='acc on' + (a.big ? ' big' : ''); el.dataset.slot=a.slot; el.textContent=a.emoji;
   el.style.left = a.dx+'%'; el.style.top = a.dy+'%';
   makeDraggable(el);
   return el;
