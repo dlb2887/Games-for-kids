@@ -331,6 +331,7 @@ function bestVoice(){
   return en.find(v=>/female|samantha|zira|google us|aria|jenny/i.test(v.name)) || en[0] || voices[0];
 }
 function say(text, {rate=0.92, pitch=1.18}={}){
+  if(!soundOn) return;            // the sound toggle mutes voice as well as effects
   if(!window.speechSynthesis) return;
   try{
     speechSynthesis.cancel();
@@ -558,11 +559,10 @@ $('#spellSay').onclick = ()=>{ SFX.pop(); if(cur) say(`Spell ${cur.w}. ${cur.w.s
    butterfly, tint its colors, add accessories, sparkle.
    ============================================================ */
 const PLAY_PHOTOS = [
-  'assets/photos/dressup1.jpg', // blue morpho
-  'assets/photos/dressup2.jpg', // peacock pansy
-  'assets/photos/dressup3.jpg', // question mark
-  'assets/photos/butterfly1.jpg', // monarch
-  'assets/photos/butterfly2.jpg'  // buckeye
+  'assets/photos/cutout1.png', // blue morpho (transparent)
+  'assets/photos/cutout2.png', // atlas moth (transparent)
+  'assets/photos/cutout3.png', // green swallowtail (transparent)
+  'assets/photos/cutout4.png'  // yellow swallowtail (transparent)
 ];
 /* "Colors" tint the real photo to an exact target color. grayscale+sepia normalizes any base
    photo to one consistent hue, then hue-rotate maps it to the chosen color (white background and
