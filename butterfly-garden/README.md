@@ -52,14 +52,16 @@ shows hand-drawn butterflies instead, so it always works.
 |------|------------|------------------|
 | `butterfly1.jpg` | Monarch butterfly (home hero) | Wikimedia Commons — *"Monarch In May"* (Creative Commons) |
 | `butterfly2.jpg` | Common buckeye butterfly (home hero) | Wikimedia Commons — *"Common Buckeye Butterfly"* (Creative Commons) |
-| `dressup1.jpg` | Blue morpho (Dress Up) | Wikimedia Commons — *"Blue morpho butterfly"* (Creative Commons) |
-| `dressup2.jpg` | Peacock pansy (Dress Up) | Wikimedia Commons — *"Peacock pansy"* (Creative Commons) |
-| `dressup3.jpg` | Question mark butterfly (Dress Up) | Wikimedia Commons — *"Question Mark Polygonia"* (Creative Commons) |
+| `cutout1.png` | Blue morpho (Dress Up) | Wikimedia Commons — *"Morpho didius"* (Creative Commons), background removed |
+| `cutout2.png` | Atlas moth (Dress Up) | Wikimedia Commons — *"Attacus atlas"* (Creative Commons), background removed |
+| `cutout3.png` | Green swallowtail (Dress Up) | Wikimedia Commons — *"Papilio peranthus"* (Creative Commons), background removed |
+| `cutout4.png` | Thoas swallowtail (Dress Up) | Wikimedia Commons — *"Papilio thoas"* (Creative Commons), background removed |
 
-The **Dress Up & Play** screen rotates through `dressup*.jpg` (plus the two home photos). If any photo
+The **Dress Up & Play** screen rotates through the transparent `cutout*.png` images. They have the
+white background removed so the color tint only recolors the butterfly, not a white box. If a photo
 is missing, that screen automatically falls back to a hand-drawn butterfly, so it always works.
 
-To swap in your own photo, just drop a JPG named `butterfly1.jpg` into `assets/photos/`.
+To swap in your own butterfly, drop a transparent PNG named `cutout1.png` into `assets/photos/`.
 
 ---
 
