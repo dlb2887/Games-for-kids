@@ -3,8 +3,9 @@
 A bright, talking little game for a 4-year-old. Butterflies are the characters, and they show up
 everywhere. Three things to do:
 
-- 🌼 **Count & Add** — count one group of butterflies, then watch new groups **fly in and add on**,
-  building the total up to 20, then a big celebration and a fresh garden
+- 🌼 **Butterfly Math** — count one group of butterflies, then watch new groups **fly in and add on**
+  or some **fly away to take away**, building and changing the total (up to 20), then a big
+  celebration and a fresh garden
 - 🐝 **Spell Words** — tap the letter-carrying butterflies in order to spell short words
 - 🎨 **Dress Up & Play** — just for fun: it shows a **real butterfly photo** you can recolor (tints
   the photo), then add items — 🎩 hat, 🎀 bow, 👑 crown, 🕶️ sunglasses, 🌸 flower, and **dresses**
