@@ -135,13 +135,16 @@
 
   /* Dress Up & Play — built around REAL butterfly photos */
   #play{justify-content:flex-start; padding-top:80px; padding-bottom:26px; gap:12px;}
-  .dressStage{position:relative; width:min(300px,72vw); height:min(300px,72vw);
+  .dressStage{position:relative; flex:0 0 auto; width:min(300px,72vw); height:min(300px,72vw);
     border-radius:34px; background:radial-gradient(circle at 50% 40%, #ffffffee, #ffffff66);
-    box-shadow:var(--shadow); display:grid; place-items:center; overflow:hidden; cursor:pointer;}
-  .dressPhoto{width:100%; height:100%; object-fit:contain; display:block; transition:filter .25s ease;
-    -webkit-user-drag:none; user-select:none;}
-  .bigBfly{width:82%; height:82%; display:grid; place-items:center;}
-  .bigBfly svg{width:100%; height:100%;}
+    box-shadow:var(--shadow); overflow:hidden; cursor:pointer;}
+  /* Photo is absolutely positioned to fill the fixed-size stage. This gives iOS Safari/WebKit a
+     definite containing block so object-fit:contain is honored (as a grid item it would otherwise
+     lay out at intrinsic size and overflow/clip the butterfly). */
+  .dressPhoto{position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block;
+    transition:filter .25s ease; -webkit-user-drag:none; user-select:none;}
+  .bigBfly{position:absolute; inset:0; display:grid; place-items:center;}
+  .bigBfly svg{width:82%; height:82%;}
   .dressPhoto.fly, .bigBfly.fly{animation:happyfly 1.2s ease;}
   .dressPhoto.rainbow, .bigBfly.rainbow{animation:huecycle 4s linear infinite;}
   @keyframes huecycle{from{filter:hue-rotate(0deg) saturate(1.5);}to{filter:hue-rotate(360deg) saturate(1.5);}}
