@@ -201,7 +201,6 @@
         <button class="bigbtn pink" data-go="spell"><span class="emoji">🐝</span> Spell Words</button>
         <button class="bigbtn purple" data-go="play"><span class="emoji">🎨</span> Dress Up &amp; Play</button>
       </div>
-      <div class="hint">Tip: tap a butterfly to hear it! 🔊</div>
     </section>
 
     <!-- MATH -->
@@ -366,12 +365,6 @@ function show(id){
 }
 $$('[data-go]').forEach(b=> b.onclick = ()=>{ ensureAudio(); SFX.pop(); show(b.dataset.go); });
 $('#homeBtn').onclick = ()=>{ SFX.pop(); show('home'); };
-
-/* Tap any butterfly to hear "butterfly" + flap */
-document.addEventListener('click', e=>{
-  const bf = e.target.closest('.bfly');
-  if(bf && !e.target.closest('.lbtn') && !e.target.closest('.choice')){ SFX.flap(); say('Butterfly!'); }
-});
 
 /* ============================================================
    CELEBRATION
@@ -673,8 +666,6 @@ function buildPlay(){
   });
   // if a photo can't load (e.g. offline), fall back to illustrated butterfly
   $('#dressPhoto').addEventListener('error', ()=>{ if(photoMode){ photoMode=false; renderBfly(); } });
-  // tap the real butterfly to hear it
-  $('#dressPhoto').addEventListener('click', ()=>{ SFX.flap(); say('Butterfly!'); });
   // tap anywhere in the garden to make butterflies flutter + sparkle
   $('#dressStage').addEventListener('pointerdown', sparkleAt);
   playBuilt = true;
