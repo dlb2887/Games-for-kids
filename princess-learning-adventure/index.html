@@ -45,10 +45,10 @@
         const initDB = () => {
             return new Promise((resolve, reject) => {
                 const request = indexedDB.open(DB_NAME, DB_VERSION);
-                
+
                 request.onerror = () => reject(request.error);
                 request.onsuccess = () => resolve(request.result);
-                
+
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -58,18 +58,46 @@
             });
         };
 
-        const saveProgress = async (gameType, data) => {
+        // saveProgress and saveSessionData both do read-existing -> merge -> write
+        // for the same record. Run them through a shared queue so two calls firing
+        // close together (e.g. a score update and a session save on the same
+        // answer) can't race and clobber each other's fields.
+        let writeQueue = Promise.resolve();
+        const enqueueWrite = (fn) => {
+            const run = writeQueue.then(fn, fn);
+            writeQueue = run.catch(() => {});
+            return run;
+        };
+
+        // Reads a key from a store that's already part of an open transaction.
+        // IMPORTANT: don't use loadProgress() (or any helper that opens its own
+        // connection) for this — awaiting a fresh indexedDB.open() crosses a task
+        // boundary, and an IndexedDB transaction auto-commits once it's gone idle
+        // waiting on unrelated async work. Reading through the same transaction's
+        // store keeps it alive so the follow-up put() doesn't throw
+        // TransactionInactiveError.
+        const getFromStore = (store, key) => new Promise((resolve, reject) => {
+            const request = store.get(key);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+
+        const saveProgress = (gameType, data) => enqueueWrite(async () => {
             try {
                 const db = await initDB();
                 const transaction = db.transaction([STORE_NAME], 'readwrite');
                 const store = transaction.objectStore(STORE_NAME);
-                
+
+                // Merge with existing record so this doesn't clobber fields
+                // written by other savers (e.g. saveSessionData's `sessions`)
+                const existing = await getFromStore(store, gameType);
                 const progressData = {
                     id: gameType,
+                    ...(existing || {}),
                     ...data,
                     lastUpdated: new Date().toISOString()
                 };
-                
+
                 store.put(progressData);
                 return new Promise((resolve, reject) => {
                     transaction.oncomplete = () => resolve();
@@ -78,7 +106,7 @@
             } catch (error) {
                 console.error('Error saving progress:', error);
             }
-        };
+        });
 
         const loadProgress = async (gameType) => {
             try {
@@ -97,7 +125,7 @@
             }
         };
 
-        const clearProgress = async (gameType) => {
+        const clearProgress = (gameType) => enqueueWrite(async () => {
             try {
                 const db = await initDB();
                 const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -111,17 +139,17 @@
             } catch (error) {
                 console.error('Error clearing progress:', error);
             }
-        };
+        });
 
         // Session tracking for performance KPIs
-        const saveSessionData = async (gameType, sessionData) => {
+        const saveSessionData = (gameType, sessionData) => enqueueWrite(async () => {
             try {
                 const db = await initDB();
                 const transaction = db.transaction([STORE_NAME], 'readwrite');
                 const store = transaction.objectStore(STORE_NAME);
 
                 // Load existing data
-                const existing = await loadProgress(gameType);
+                const existing = await getFromStore(store, gameType);
                 const sessions = existing?.sessions || [];
 
                 // Add new session (keep last 50 sessions for trends)
@@ -149,7 +177,7 @@
             } catch (error) {
                 console.error('Error saving session data:', error);
             }
-        };
+        });
 
         // Badge/Achievement System
         const BADGES = [
@@ -2561,6 +2589,7 @@
                                 {stats.memory.sessions && stats.memory.sessions.length > 0 ? (
                                     <>
                                         <p className="text-lg"><strong>Games Completed:</strong> {stats.memory.sessions.filter(s => s.completed).length}</p>
+                                        <p className="text-lg"><strong>Best Moves:</strong> {stats.memory.bestMoves || 0}</p>
                                         <div className="mt-3 pt-3 border-t border-gray-200">
                                             <p className="text-sm font-semibold text-gray-700 mb-2">📊 Performance Metrics:</p>
                                             <p className="text-sm">
@@ -2983,10 +3012,20 @@
             const [matched, setMatched] = useState([]);
             const [score, setScore] = useState(0);
             const [moves, setMoves] = useState(0);
+            const [gamesCompleted, setGamesCompleted] = useState(0);
+            const [bestMoves, setBestMoves] = useState(0);
 
             const emojis = ['🏰', '👑', '⭐', '💖', '🌹', '🐸', '🔱', '📚'];
 
             useEffect(() => {
+                const loadSavedProgress = async () => {
+                    const saved = await loadProgress('memory');
+                    if (saved) {
+                        setGamesCompleted(saved.gamesCompleted || 0);
+                        setBestMoves(saved.bestMoves || 0);
+                    }
+                };
+                loadSavedProgress();
                 initializeGame();
             }, []);
 
@@ -3018,6 +3057,7 @@
 
                         // Check for badges
                         if (newMatched.length === cards.length) {
+                            const finalMoves = moves + 1; // +1 because this is the final move
                             const badges = await loadBadges();
                             const badge = await checkAndUnlockBadge('memory_perfect', badges);
                             if (badge) {
@@ -3028,9 +3068,20 @@
 
                             // Save session data with KPIs
                             await saveSessionData('memory', {
-                                moves: moves + 1, // +1 because this is the final move
+                                moves: finalMoves,
                                 pairs: cards.length / 2,
                                 completed: true
+                            });
+
+                            // Persist best score so Progress Report reflects completed games
+                            const newGamesCompleted = gamesCompleted + 1;
+                            const newBestMoves = bestMoves === 0 ? finalMoves : Math.min(bestMoves, finalMoves);
+                            setGamesCompleted(newGamesCompleted);
+                            setBestMoves(newBestMoves);
+                            await saveProgress('memory', {
+                                score: newScore,
+                                gamesCompleted: newGamesCompleted,
+                                bestMoves: newBestMoves
                             });
 
                             setTimeout(() => {
