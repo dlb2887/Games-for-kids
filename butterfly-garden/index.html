@@ -348,7 +348,11 @@ function toggleSound(){
   soundOn = !soundOn; store.set('bfly_sound', soundOn?'on':'off');
   refreshSoundIcons();
   if(soundOn){ ensureAudio(); SFX.pop(); }
-  else { if(window.speechSynthesis) speechSynthesis.cancel(); }
+  else if(window.speechSynthesis){
+    speechSynthesis.cancel();
+    // Chrome occasionally fails to stop an in-flight utterance on the first cancel() call.
+    setTimeout(()=>{ if(speechSynthesis.speaking) speechSynthesis.cancel(); }, 50);
+  }
 }
 $('#soundBtn').onclick = toggleSound;
 $('#soundBtnHome').onclick = toggleSound;
