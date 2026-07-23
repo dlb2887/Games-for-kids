@@ -179,6 +179,83 @@
             }
         });
 
+        // Text-to-speech voice selection. Browsers expose whatever voices the OS/
+        // browser provides; the default one Web Speech API picks is often a dated,
+        // robotic-sounding voice even when nicer ones (Edge's "Natural"/neural
+        // voices, Chrome's "Google US English", macOS's "Samantha", etc.) are
+        // available. This picks the best-quality voice for a requested gender
+        // (princes speak male, princesses speak female), and varies which
+        // specific voice gets used by character name so not every prince/
+        // princess sounds identical when more than one good option exists.
+        const VOICE_GENDER = {
+            'Microsoft David - English (United States)': 'male',
+            'Microsoft Mark - English (United States)': 'male',
+            'Microsoft Zira - English (United States)': 'female',
+            'Microsoft Guy Online (Natural) - English (United States)': 'male',
+            'Microsoft Andrew Online (Natural) - English (United States)': 'male',
+            'Microsoft Christopher Online (Natural) - English (United States)': 'male',
+            'Microsoft Eric Online (Natural) - English (United States)': 'male',
+            'Microsoft Roger Online (Natural) - English (United States)': 'male',
+            'Microsoft Brian Online (Natural) - English (United States)': 'male',
+            'Microsoft Davis Online (Natural) - English (United States)': 'male',
+            'Microsoft Ava Online (Natural) - English (United States)': 'female',
+            'Microsoft Emma Online (Natural) - English (United States)': 'female',
+            'Microsoft Jenny Online (Natural) - English (United States)': 'female',
+            'Microsoft Michelle Online (Natural) - English (United States)': 'female',
+            'Microsoft Aria Online (Natural) - English (United States)': 'female',
+            'Microsoft Sara Online (Natural) - English (United States)': 'female',
+            'Google US English': 'female',
+            'Google UK English Male': 'male',
+            'Google UK English Female': 'female',
+            'Samantha': 'female', 'Victoria': 'female', 'Karen': 'female', 'Moira': 'female', 'Tessa': 'female',
+            'Alex': 'male', 'Fred': 'male', 'Daniel': 'male', 'Oliver': 'male'
+        };
+
+        const classifyVoiceGender = (voice) => {
+            if (VOICE_GENDER[voice.name]) return VOICE_GENDER[voice.name];
+            if (/female/i.test(voice.name)) return 'female';
+            if (/\bmale\b/i.test(voice.name)) return 'male';
+            return 'unknown';
+        };
+
+        const voiceQualityRank = (voice) => {
+            if (/natural|online|neural/i.test(voice.name)) return 3;
+            if (voice.name === 'Google US English' || voice.name === 'Samantha') return 2;
+            if (voice.localService) return 1;
+            return 0;
+        };
+
+        // Deterministic per-character pick so e.g. "Prince Eric" always sounds
+        // the same, while a different prince can land on a different voice.
+        const hashString = (str) => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+            return Math.abs(hash);
+        };
+
+        // gender: 'male' | 'female' | null (no preference). seed: character
+        // name used to vary which voice is picked among equally good options.
+        const getBestVoice = (gender, seed) => {
+            if (!('speechSynthesis' in window)) return null;
+            const voices = speechSynthesis.getVoices();
+            if (!voices.length) return null;
+
+            const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+            const pool = englishVoices.length ? englishVoices : voices;
+
+            let candidates = pool;
+            if (gender) {
+                const matching = pool.filter(v => classifyVoiceGender(v) === gender);
+                if (matching.length) candidates = matching;
+            }
+
+            const bestRank = Math.max(...candidates.map(voiceQualityRank));
+            const topTier = candidates.filter(v => voiceQualityRank(v) === bestRank);
+
+            if (topTier.length === 1 || !seed) return topTier[0];
+            return topTier[hashString(seed) % topTier.length];
+        };
+
         // Badge/Achievement System
         const BADGES = [
             { id: 'first_number', name: 'Number Explorer', emoji: '🌟', description: 'Found your first number!', condition: 'numbers_score_1' },
@@ -719,6 +796,7 @@
                     utterance.rate = rate;
                     utterance.pitch = 1.2;
                     utterance.volume = 0.8;
+                    utterance.voice = getBestVoice('male', currentPrince?.name);
                     speechSynthesis.speak(utterance);
                 }
             };
@@ -1256,6 +1334,7 @@
                     utterance.rate = rate;
                     utterance.pitch = 1.3;
                     utterance.volume = 0.8;
+                    utterance.voice = getBestVoice('female', currentPrincess?.name);
                     speechSynthesis.speak(utterance);
                 }
             };
@@ -1279,7 +1358,7 @@
                     setGameMode('letters');
                     setLevel(progress.level || 1);
                     setScore(progress.letterScore || 0);
-                    speak(`Hi! I'm ${princess.name}. Let's learn my letters: ${princess.keyboardRegion}!`, 1);
+                    speak(`Hi! I'm ${princess.name}. Let's learn my letters together!`, 1);
                     generateNewQuestion(princess);
                 }
             };
@@ -1519,19 +1598,6 @@
                         setUserInput('');
                     }, 3500);
                 }
-            };
-
-            const renderPrincessDecoration = () => {
-                const items = [];
-                for (let i = 0; i < 3; i++) {
-                    items.push(
-                        <div key={i} className="text-4xl animate-pulse inline-block mx-2" 
-                             style={{ animationDelay: `${i * 0.2}s` }}>
-                            {currentPrincess.object}
-                        </div>
-                    );
-                }
-                return items;
             };
 
             // Princess selection screen
@@ -1790,11 +1856,7 @@
                         <h4 className="text-2xl font-bold text-center mb-4 text-purple-800">
                             Find the letter: <span className="text-6xl text-red-500">{currentLetter}</span>
                         </h4>
-                        
-                        <div className="flex justify-center gap-2 mb-6">
-                            {renderPrincessDecoration()}
-                        </div>
-                        
+
                         <p className="text-center text-lg text-purple-600 font-semibold">
                             Click the letter or press it on your keyboard!
                         </p>
@@ -1922,6 +1984,7 @@
                     utterance.rate = rate;
                     utterance.pitch = 1.3;
                     utterance.volume = 0.8;
+                    utterance.voice = getBestVoice();
                     speechSynthesis.speak(utterance);
                 }
             };
@@ -2180,6 +2243,17 @@
             const [score, setScore] = useState(0);
             const [gameState, setGameState] = useState('instructions');
             const [feedback, setFeedback] = useState('');
+
+            const speak = (text, rate = 1) => {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.rate = rate;
+                    utterance.pitch = 1.1;
+                    utterance.volume = 0.8;
+                    utterance.voice = getBestVoice();
+                    speechSynthesis.speak(utterance);
+                }
+            };
 
             // Coding challenges organized by level
             const challenges = {
@@ -2717,6 +2791,7 @@
                     utterance.rate = rate;
                     utterance.pitch = 1.3;
                     utterance.volume = 0.8;
+                    utterance.voice = getBestVoice('female', 'Princess Rapunzel');
                     speechSynthesis.speak(utterance);
                 }
             };
@@ -3431,6 +3506,7 @@
                     utterance.rate = rate;
                     utterance.pitch = 1.2;
                     utterance.volume = 0.8;
+                    utterance.voice = getBestVoice('female', selectedPrincess?.name);
                     speechSynthesis.speak(utterance);
                 }
             };
