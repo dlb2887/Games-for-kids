@@ -393,20 +393,6 @@
             </svg>
         );
 
-        const Volume2 = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5L6 9H2v6h4l5 4V5z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
-            </svg>
-        );
-
-        const VolumeX = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5L6 9H2v6h4l5 4V5z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M23 9l-6 6M17 9l6 6" />
-            </svg>
-        );
-
         // Global mute state, shared across every game's speak() function.
         // A plain module-level variable (not React state) so speak() always reads the live value
         // without every component needing to be re-rendered on toggle.
@@ -433,17 +419,31 @@
             return muted;
         };
 
+        // Shared floating HUD button — matches Butterfly Garden's circular .roundbtn
+        // (same size, shadow, and active-scale) so both games' chrome buttons look identical.
+        const RoundIconButton = ({ onClick, title, children, className = '' }) => (
+            <button
+                onClick={onClick}
+                title={title}
+                aria-label={title}
+                className={`w-[62px] h-[62px] rounded-full bg-[#fffdf7] text-[28px] leading-none
+                    flex items-center justify-center transition-transform active:scale-90
+                    shadow-[0_10px_0_rgba(0,0,0,.08),0_18px_40px_rgba(80,50,120,.18)] ${className}`}
+            >
+                {children}
+            </button>
+        );
+
         const MuteButton = ({ className = '' }) => {
             const muted = useMuted();
             return (
-                <button
+                <RoundIconButton
                     onClick={() => setGlobalMuted(!isMuted)}
                     title={muted ? 'Unmute' : 'Mute'}
-                    aria-label={muted ? 'Unmute' : 'Mute'}
-                    className={`bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-3 rounded-xl shadow-lg transition-all ${className}`}
+                    className={className}
                 >
-                    {muted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
-                </button>
+                    {muted ? '🔇' : '🔊'}
+                </RoundIconButton>
             );
         };
 
@@ -682,13 +682,11 @@
                         {/* Header with Menu Button */}
                         <div className="mb-6">
                             <div className="flex items-center gap-4 mb-4">
-                                <button
-                                    onClick={() => setSidebarOpen(true)}
-                                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-3 rounded-xl shadow-lg transition-all"
-                                >
+                                <RoundIconButton onClick={() => setSidebarOpen(true)} title="Menu" className="text-[#41355c]">
                                     <Menu className="w-6 h-6" />
-                                </button>
+                                </RoundIconButton>
                                 <h1 className="text-4xl font-bold text-white drop-shadow-lg flex-1">Disney Learning Adventures</h1>
+                                <RoundIconButton onClick={() => setCurrentGame('landing')} title="Home">🏠</RoundIconButton>
                                 <MuteButton />
                             </div>
                         </div>
