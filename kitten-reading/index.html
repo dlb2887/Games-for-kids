@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magical Kittens Reading</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        * { box-sizing: border-box; }
+
+        /* The sentence a child drags a finger across. touch-action:none is what
+           stops the browser from scrolling the page instead of reading the word. */
+        .readable {
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Chunk / word highlighting is driven by toggling these classes on element
+           refs directly (never through React state) so a moving finger doesn't
+           re-render the sentence on every pointermove. */
+        .chunk {
+            display: inline-block;
+            transition: transform .12s ease, color .12s ease, text-shadow .12s ease;
+        }
+        .chunk.lit {
+            transform: scale(1.35) translateY(-6px);
+            color: #db2777;
+            text-shadow: 0 0 16px rgba(236, 72, 153, .55);
+        }
+        .word {
+            display: inline-block;
+            border-radius: 14px;
+            padding: 2px 10px;
+            transition: background-color .15s ease, transform .15s ease;
+        }
+        .word.lit {
+            background-color: rgba(253, 224, 71, .75);
+            transform: scale(1.08);
+        }
+        .word.done { animation: word-pop .5s ease; }
+        @keyframes word-pop {
+            0%   { transform: scale(1); }
+            40%  { transform: scale(1.25) rotate(-2deg); }
+            100% { transform: scale(1); }
+        }
+
+        /* Flash card flip */
+        .flip { perspective: 1200px; }
+        .flip-inner {
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform .5s ease;
+        }
+        .flip-inner.flipped { transform: rotateY(180deg); }
+        .flip-face {
+            position: absolute;
+            inset: 0;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 24px;
+        }
+        .flip-back { transform: rotateY(180deg); }
+
+        /* Kitten superpower aura */
+        @keyframes aura-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 currentColor, 0 0 24px 2px currentColor; }
+            50%      { box-shadow: 0 0 0 8px rgba(255,255,255,.15), 0 0 44px 8px currentColor; }
+        }
+        .aura { animation: aura-pulse 2.4s ease-in-out infinite; }
+        @keyframes float-bob {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50%      { transform: translateY(-10px) rotate(2deg); }
+        }
+        .bob { animation: float-bob 3s ease-in-out infinite; }
+        @keyframes sparkle-rise {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to   { opacity: 0; transform: translateY(-70px) scale(1.6); }
+        }
+        .sparkle { animation: sparkle-rise 1s ease-out forwards; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useLayoutEffect, useCallback } = React;
+
+        /* ------------------------------------------------------------------ *
+         * Storage
+         * ------------------------------------------------------------------ */
+
+        const DB_NAME = 'KittenReadingGame';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'gameProgress';
+
+        const initDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+            });
+        };
+
+        // Every save is read-existing -> merge -> write on the same record, so two
+        // saves firing close together (finishing a chapter also unlocks words and
+        // may unlock a badge) would clobber each other's fields. Serialize them.
+        let writeQueue = Promise.resolve();
+        const enqueueWrite = (fn) => {
+            const run = writeQueue.then(fn, fn);
+            writeQueue = run.catch(() => {});
+            return run;
+        };
+
+        // Reads a key from a store that's already part of an open transaction.
+        // IMPORTANT: don't read through a helper that opens its own connection —
+        // awaiting a fresh indexedDB.open() crosses a task boundary, and an
+        // IndexedDB transaction auto-commits once it has gone idle waiting on
+        // unrelated async work. The follow-up put() would then throw
+        // TransactionInactiveError and the write would be silently dropped.
+        const getFromStore = (store, key) => new Promise((resolve, reject) => {
+            const request = store.get(key);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+
+        const saveProgress = (recordId, data) => enqueueWrite(async () => {
+            try {
+                const db = await initDB();
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+
+                const existing = await getFromStore(store, recordId);
+                const record = {
+                    id: recordId,
+                    ...(existing || {}),
+                    ...data,
+                    lastUpdated: new Date().toISOString()
+                };
+
+                store.put(record);
+                return new Promise((resolve, reject) => {
+                    transaction.oncomplete = () => resolve();
+                    transaction.onerror = () => reject(transaction.error);
+                });
+            } catch (error) {
+                console.error('Error saving progress:', error);
+            }
+        });
+
+        const loadProgress = async (recordId) => {
+            try {
+                const db = await initDB();
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(recordId);
+
+                return new Promise((resolve, reject) => {
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            } catch (error) {
+                console.error('Error loading progress:', error);
+                return null;
+            }
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Speech
+         * ------------------------------------------------------------------ */
+
+        // Browsers expose whatever voices the OS provides, and the one the Web
+        // Speech API picks by default is often a dated robotic voice even when
+        // nicer ones (Edge "Natural"/neural voices, "Google US English",
+        // macOS "Samantha") are installed. Pick the best available for a
+        // requested gender, varied by character name so each kitten keeps its
+        // own voice instead of all three sounding identical.
+        const VOICE_GENDER = {
+            'Microsoft David - English (United States)': 'male',
+            'Microsoft Mark - English (United States)': 'male',
+            'Microsoft Zira - English (United States)': 'female',
+            'Microsoft Guy Online (Natural) - English (United States)': 'male',
+            'Microsoft Andrew Online (Natural) - English (United States)': 'male',
+            'Microsoft Christopher Online (Natural) - English (United States)': 'male',
+            'Microsoft Eric Online (Natural) - English (United States)': 'male',
+            'Microsoft Roger Online (Natural) - English (United States)': 'male',
+            'Microsoft Brian Online (Natural) - English (United States)': 'male',
+            'Microsoft Davis Online (Natural) - English (United States)': 'male',
+            'Microsoft Ava Online (Natural) - English (United States)': 'female',
+            'Microsoft Emma Online (Natural) - English (United States)': 'female',
+            'Microsoft Jenny Online (Natural) - English (United States)': 'female',
+            'Microsoft Michelle Online (Natural) - English (United States)': 'female',
+            'Microsoft Aria Online (Natural) - English (United States)': 'female',
+            'Microsoft Sara Online (Natural) - English (United States)': 'female',
+            'Google US English': 'female',
+            'Google UK English Male': 'male',
+            'Google UK English Female': 'female',
+            'Samantha': 'female', 'Victoria': 'female', 'Karen': 'female', 'Moira': 'female', 'Tessa': 'female',
+            'Alex': 'male', 'Fred': 'male', 'Daniel': 'male', 'Oliver': 'male'
+        };
+
+        const classifyVoiceGender = (voice) => {
+            if (VOICE_GENDER[voice.name]) return VOICE_GENDER[voice.name];
+            if (/female/i.test(voice.name)) return 'female';
+            if (/\bmale\b/i.test(voice.name)) return 'male';
+            return 'unknown';
+        };
+
+        const voiceQualityRank = (voice) => {
+            if (/natural|online|neural/i.test(voice.name)) return 3;
+            if (voice.name === 'Google US English' || voice.name === 'Samantha') return 2;
+            if (voice.localService) return 1;
+            return 0;
+        };
+
+        const hashString = (str) => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+            return Math.abs(hash);
+        };
+
+        const getBestVoice = (gender, seed) => {
+            if (!('speechSynthesis' in window)) return null;
+            const voices = speechSynthesis.getVoices();
+            if (!voices.length) return null;
+
+            const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+            const pool = englishVoices.length ? englishVoices : voices;
+
+            let candidates = pool;
+            if (gender) {
+                const matching = pool.filter(v => classifyVoiceGender(v) === gender);
+                if (matching.length) candidates = matching;
+            }
+
+            const bestRank = Math.max(...candidates.map(voiceQualityRank));
+            const topTier = candidates.filter(v => voiceQualityRank(v) === bestRank);
+
+            if (topTier.length === 1 || !seed) return topTier[0];
+            return topTier[hashString(seed) % topTier.length];
+        };
+
+        // Global mute state, shared across every module's speak() call. A plain
+        // module-level variable (not React state) so speak() always reads the live
+        // value without every component needing to re-render on toggle.
+        let isMuted = (() => {
+            try { return localStorage.getItem('mk_muted') === 'true'; } catch (e) { return false; }
+        })();
+        const muteListeners = new Set();
+        const setGlobalMuted = (value) => {
+            isMuted = value;
+            try { localStorage.setItem('mk_muted', value ? 'true' : 'false'); } catch (e) {}
+            if (value && 'speechSynthesis' in window) {
+                speechSynthesis.cancel();
+                // Chrome occasionally fails to stop an in-flight utterance on the first cancel() call.
+                setTimeout(() => { if (speechSynthesis.speaking) speechSynthesis.cancel(); }, 50);
+            }
+            muteListeners.forEach(fn => fn(value));
+        };
+        const useMuted = () => {
+            const [muted, setMuted] = useState(isMuted);
+            useEffect(() => {
+                muteListeners.add(setMuted);
+                return () => muteListeners.delete(setMuted);
+            }, []);
+            return muted;
+        };
+
+        // The one place utterances are made. Speaking is ON by default; the 🔊
+        // button is the only thing that turns it off.
+        const speak = (text, options = {}) => {
+            if (isMuted) return;
+            if (!('speechSynthesis' in window)) return;
+            const { rate = 1, pitch = 1.2, volume = 0.9, gender = 'female', seed = null } = options;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = rate;
+            utterance.pitch = pitch;
+            utterance.volume = volume;
+            const voice = getBestVoice(gender, seed);
+            if (voice) utterance.voice = voice;
+            speechSynthesis.speak(utterance);
+        };
+
+        const stopSpeaking = () => {
+            if ('speechSynthesis' in window) speechSynthesis.cancel();
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Letter sounds and word chunking
+         * ------------------------------------------------------------------ */
+
+        // Single letters. Continuants are written stretched ("mmm") because that
+        // is how they get sounded out; stops get the usual "buh"/"tuh" shape.
+        const LETTER_SOUNDS = {
+            a: 'ah',  b: 'buh', c: 'kuh', d: 'duh', e: 'eh',  f: 'ffff',
+            g: 'guh', h: 'huh', i: 'ih',  j: 'juh', k: 'kuh', l: 'lll',
+            m: 'mmm', n: 'nnn', o: 'oh',  p: 'puh', q: 'kw',  r: 'rrr',
+            s: 'sss', t: 'tuh', u: 'uh',  v: 'vvv', w: 'wuh', x: 'ks',
+            y: 'yuh', z: 'zzz'
+        };
+
+        // Letter teams that make one sound. Checked longest-first so "igh" wins
+        // over "gh", and so `ship` chunks as sh·i·p rather than s·h·i·p.
+        const DIGRAPH_SOUNDS = {
+            igh: 'eye', tch: 'chuh',
+            sh: 'shhh', ch: 'chuh', th: 'thh', ck: 'kuh', ng: 'ng',
+            ee: 'eee', oo: 'ooo', ea: 'eee', ai: 'ay', ay: 'ay',
+            oa: 'oh', ow: 'ow', ou: 'ow', oi: 'oy', oy: 'oy',
+            ar: 'arr', or: 'or', er: 'er', ir: 'er', ur: 'er',
+            qu: 'kw', wh: 'wuh'
+        };
+
+        const DIGRAPHS_BY_LENGTH = Object.keys(DIGRAPH_SOUNDS).sort((a, b) => b.length - a.length);
+
+        // Splits a word into the letter-sound chunks a child drags across.
+        // Returns [{ text, sound }] using the word's original capitalization for
+        // display, and lowercase for the sound lookup.
+        const chunkWord = (word) => {
+            const lower = word.toLowerCase();
+            const chunks = [];
+            let i = 0;
+            while (i < lower.length) {
+                const digraph = DIGRAPHS_BY_LENGTH.find(d =>
+                    lower.startsWith(d, i) &&
+                    // A letter team needs the whole team inside the word, and a
+                    // trailing "e" team like `ar` in "are" still counts.
+                    i + d.length <= lower.length
+                );
+                if (digraph) {
+                    chunks.push({ text: word.slice(i, i + digraph.length), sound: DIGRAPH_SOUNDS[digraph] });
+                    i += digraph.length;
+                    continue;
+                }
+                const letter = lower[i];
+                chunks.push({ text: word[i], sound: LETTER_SOUNDS[letter] || letter });
+                i += 1;
+            }
+            return chunks;
+        };
+
+        // Sentences are stored as plain text. Split into tokens that keep their
+        // punctuation for display but expose a clean, letters-only form for
+        // chunking and speaking.
+        const tokenizeSentence = (sentence) => sentence.split(/\s+/).filter(Boolean).map(token => {
+            const clean = token.replace(/[^a-zA-Z]/g, '');
+            const lead = token.slice(0, token.indexOf(clean[0] || token[0]));
+            const trail = token.slice((lead + clean).length);
+            return { raw: token, clean, lead, trail, chunks: clean ? chunkWord(clean) : [] };
+        });
+
+        /* ------------------------------------------------------------------ *
+         * Characters
+         * ------------------------------------------------------------------ */
+
+        // Photos are optional. Drop kitten1.jpg … kitten3.jpg into assets/photos/
+        // and they appear automatically; while they're missing the emoji stands in,
+        // so the game never shows a broken image.
+        const KITTENS = [
+            { id: 'pip',   name: 'Pip',   power: 'Zap',           powerEmoji: '⚡', cape: 'red',    color: '#ef4444', photo: 'assets/photos/kitten1.jpg', emoji: '🐱', gender: 'female' },
+            { id: 'luna',  name: 'Luna',  power: 'Starlight Fly', powerEmoji: '✨', cape: 'blue',   color: '#3b82f6', photo: 'assets/photos/kitten2.jpg', emoji: '🐈', gender: 'female' },
+            { id: 'boots', name: 'Boots', power: 'Super Strong',  powerEmoji: '💪', cape: 'yellow', color: '#eab308', photo: 'assets/photos/kitten3.jpg', emoji: '🐈‍⬛', gender: 'male' }
+        ];
+
+        const VILLAINS = {
+            wolf: { name: 'Big Bad Wolf', emoji: '🐺', gender: 'male' },
+            fox:  { name: 'Sly Fox',      emoji: '🦊', gender: 'male' }
+        };
+
+        /* ------------------------------------------------------------------ *
+         * The story
+         * ------------------------------------------------------------------ */
+
+        // Written so that all 40 Dolch pre-primer sight words appear across the
+        // five chapters. `words` is the list each chapter introduces — reading a
+        // chapter is what unlocks those words in the flash card decks.
+        const STORY = [
+            {
+                id: 1,
+                title: 'Three Little Kittens',
+                emoji: '🐱',
+                cast: ['pip', 'luna', 'boots'],
+                sentences: [
+                    'Here are three little kittens.',
+                    'I am Pip.',
+                    'My cape is red.',
+                    'Luna has a blue cape.',
+                    'Boots has a yellow cape.',
+                    'We can play all day.'
+                ],
+                words: ['here', 'three', 'little', 'I', 'my', 'is', 'red', 'a', 'blue', 'yellow', 'we', 'can', 'play']
+            },
+            {
+                id: 2,
+                title: 'The Magic Powers',
+                emoji: '✨',
+                cast: ['pip', 'luna', 'boots'],
+                sentences: [
+                    'Look at my cape go.',
+                    'Pip can make a zap.',
+                    'Luna can jump up high.',
+                    'Boots is big and strong.',
+                    'See the funny kittens fly.',
+                    'One, two, three, zap!'
+                ],
+                words: ['look', 'go', 'make', 'jump', 'up', 'big', 'and', 'see', 'the', 'funny', 'one', 'two']
+            },
+            {
+                id: 3,
+                title: 'The Big Bad Wolf',
+                emoji: '🐺',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'wolf',
+                sentences: [
+                    'A bad wolf is in the woods.',
+                    'The wolf said come to me.',
+                    'Run little kittens run!',
+                    'But we will not run.',
+                    'Pip said help me now.',
+                    'Zap! The wolf fell down.'
+                ],
+                words: ['in', 'said', 'come', 'to', 'me', 'run', 'not', 'help', 'down']
+            },
+            {
+                id: 4,
+                title: 'The Sly Fox',
+                emoji: '🦊',
+                cast: ['luna', 'boots'],
+                villain: 'fox',
+                sentences: [
+                    'Where is the sly fox?',
+                    'Look for him in the barn.',
+                    'Can you find the fox?',
+                    'The fox said play with me.',
+                    'But it is a trick!',
+                    'Luna said go away fox.'
+                ],
+                words: ['where', 'for', 'you', 'find', 'it', 'away']
+            },
+            {
+                id: 5,
+                title: 'The Kittens Win',
+                emoji: '🎉',
+                cast: ['pip', 'luna', 'boots'],
+                sentences: [
+                    'The wolf and the fox run.',
+                    'They run far away.',
+                    'We did it! We win!',
+                    'Look at my three friends.',
+                    'Come and play with us.',
+                    'You can be a hero too.'
+                ],
+                words: []
+            }
+        ];
+
+        // The 40 Dolch pre-primer sight words, in the order the story introduces
+        // them (chapter by chapter). Every one of these appears in STORY above.
+        const DOLCH_PREPRIMER = STORY.flatMap(chapter => chapter.words);
+
+        const wordsUnlockedBy = (chaptersDone) => {
+            // Chapter 1's words are available from the very start; after that a
+            // chapter's words unlock once that chapter has been read.
+            const unlocked = new Set(STORY[0].words);
+            STORY.forEach(chapter => {
+                if (chaptersDone.includes(chapter.id)) chapter.words.forEach(w => unlocked.add(w));
+            });
+            // Always offer the next chapter's words too, so the deck keeps growing
+            // even if she prefers cards to reading.
+            const nextChapter = STORY.find(c => !chaptersDone.includes(c.id));
+            if (nextChapter) nextChapter.words.forEach(w => unlocked.add(w));
+            return DOLCH_PREPRIMER.filter(w => unlocked.has(w));
+        };
+
+        const MASTERY_STREAK = 3;
+
+        /* ------------------------------------------------------------------ *
+         * Badges
+         * ------------------------------------------------------------------ */
+
+        const BADGES = [
+            { id: 'first_sound',   name: 'First Sound',     emoji: '🔤', description: 'Sounded out your first word!', condition: 'sounded_1' },
+            { id: 'ten_sounds',    name: 'Sound Sleuth',    emoji: '🐾', description: 'Sounded out 10 words!',        condition: 'sounded_10' },
+            { id: 'first_chapter', name: 'Story Starter',   emoji: '📖', description: 'Finished your first chapter!', condition: 'chapter_1' },
+            { id: 'wolf_beaten',   name: 'Wolf Beater',     emoji: '🐺', description: 'Beat the Big Bad Wolf!',       condition: 'chapter_3' },
+            { id: 'all_chapters',  name: 'Story Champion',  emoji: '🏆', description: 'Read the whole story!',        condition: 'chapter_5' },
+            { id: 'first_card',    name: 'Card Kitten',     emoji: '🃏', description: 'Got your first flash card!',   condition: 'cards_1' },
+            { id: 'ten_mastered',  name: 'Word Wizard',     emoji: '⭐', description: 'Mastered 10 sight words!',     condition: 'mastered_10' },
+            { id: 'all_mastered',  name: 'Super Reader',    emoji: '🦸', description: 'Mastered every sight word!',   condition: 'mastered_all' }
+        ];
+
+        const saveBadges = (badges) => saveProgress('badges', { unlockedBadges: badges });
+        const loadBadges = async () => (await loadProgress('badges'))?.unlockedBadges || [];
+
+        const checkAndUnlockBadge = async (condition, currentBadges) => {
+            const badge = BADGES.find(b => b.condition === condition);
+            if (badge && !currentBadges.includes(badge.id)) {
+                const newBadges = [...currentBadges, badge.id];
+                await saveBadges(newBadges);
+                return badge;
+            }
+            return null;
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Shared chrome — matches Butterfly Garden's .roundbtn and Princess
+         * Learning Adventure's buttons so all three games look like one family.
+         * ------------------------------------------------------------------ */
+
+        const RoundIconButton = ({ onClick, title, children, className = '' }) => (
+            <button
+                onClick={onClick}
+                title={title}
+                aria-label={title}
+                className={`w-[62px] h-[62px] rounded-full bg-[#fffdf7] text-[28px] leading-none
+                    flex items-center justify-center transition-transform active:scale-90
+                    shadow-[0_10px_0_rgba(0,0,0,.08),0_18px_40px_rgba(80,50,120,.18)] ${className}`}
+            >
+                {children}
+            </button>
+        );
+
+        const MuteButton = ({ className = '' }) => {
+            const muted = useMuted();
+            return (
+                <RoundIconButton
+                    onClick={() => setGlobalMuted(!isMuted)}
+                    title={muted ? 'Unmute' : 'Mute'}
+                    className={className}
+                >
+                    {muted ? '🔇' : '🔊'}
+                </RoundIconButton>
+            );
+        };
+
+        const BackButton = ({ onClick, label = '← Back' }) => (
+            <button
+                onClick={onClick}
+                className="bg-white bg-opacity-30 hover:bg-opacity-50 text-white px-4 py-2 rounded-full font-bold shadow-lg transition-all"
+            >
+                {label}
+            </button>
+        );
+
+        // A kitten's face: the real photo if it's there, the emoji if it isn't.
+        const KittenFace = ({ kitten, size = 96, showAura = true }) => {
+            const [failed, setFailed] = useState(false);
+            return (
+                <div
+                    className={`rounded-full overflow-hidden flex items-center justify-center bg-white ${showAura ? 'aura' : ''}`}
+                    style={{
+                        width: size, height: size, color: kitten.color,
+                        border: `4px solid ${kitten.color}`,
+                        fontSize: size * 0.55
+                    }}
+                    title={`${kitten.name} — ${kitten.power}`}
+                >
+                    {failed ? (
+                        <span role="img" aria-label={kitten.name}>{kitten.emoji}</span>
+                    ) : (
+                        <img
+                            src={kitten.photo}
+                            alt={kitten.name}
+                            onError={() => setFailed(true)}
+                            className="w-full h-full object-cover"
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const KittenCard = ({ kitten, size = 96 }) => (
+            <div className="flex flex-col items-center gap-1">
+                <div className="bob"><KittenFace kitten={kitten} size={size} /></div>
+                <div className="font-bold text-white drop-shadow">{kitten.name}</div>
+                <div className="text-sm text-white drop-shadow">{kitten.powerEmoji} {kitten.power}</div>
+            </div>
+        );
+
+        const BadgePopup = ({ badge, onClose }) => {
+            useEffect(() => {
+                const timer = setTimeout(onClose, 4000);
+                return () => clearTimeout(timer);
+            }, [badge, onClose]);
+            return (
+                <div className="fixed inset-x-0 top-4 flex justify-center z-50 px-4">
+                    <div className="bg-white rounded-3xl shadow-2xl px-6 py-4 flex items-center gap-4 border-4 border-yellow-300">
+                        <div className="text-5xl">{badge.emoji}</div>
+                        <div>
+                            <div className="font-bold text-purple-700 text-lg">New badge: {badge.name}</div>
+                            <div className="text-purple-500 text-sm">{badge.description}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Module 1 — Sound It Out
+         * ------------------------------------------------------------------ */
+
+        const READ_MODE_KEY = 'mk_read_mode';
+        const loadReadMode = () => {
+            try { return localStorage.getItem(READ_MODE_KEY) === 'along' ? 'along' : 'sound'; }
+            catch (e) { return 'sound'; }
+        };
+
+        const SoundItOutGame = ({ onBadge, onChapterDone, chaptersDone }) => {
+            const [chapter, setChapter] = useState(null);
+            const [sentenceIndex, setSentenceIndex] = useState(0);
+            const [mode, setMode] = useState(loadReadMode);
+            const [finished, setFinished] = useState(false);
+            const [sparkles, setSparkles] = useState([]);
+
+            const containerRef = useRef(null);
+            const chunkRefs = useRef([]);      // flat list of { el, rect, wordIndex, chunkIndex }
+            const wordRefs = useRef([]);       // flat list of { el, rect, token }
+            const lastChunkRef = useRef(-1);
+            const lastWordRef = useRef(-1);
+            const touchedRef = useRef(new Set());
+            const blendedRef = useRef(new Set());
+            const draggingRef = useRef(false);
+            const startPosRef = useRef({ x: 0, y: 0 });
+            const movedRef = useRef(false);
+            const soundedCountRef = useRef(0);
+
+            const tokens = chapter ? tokenizeSentence(chapter.sentences[sentenceIndex]) : [];
+
+            // Cache every chunk/word rectangle. Measuring inside pointermove would
+            // hit the layout engine on every single frame, so it happens here
+            // instead and the pointer handlers only read the cache.
+            const measure = useCallback(() => {
+                const remeasure = (entry) => {
+                    if (!entry) return;
+                    entry.rect = entry.el ? entry.el.getBoundingClientRect() : null;
+                };
+                chunkRefs.current.forEach(remeasure);
+                wordRefs.current.forEach(remeasure);
+            }, []);
+
+            // Deliberately no dependency array: the render body rebuilds both ref
+            // arrays, so ANY re-render — including a sparkle popping mid-drag —
+            // leaves them unmeasured. Without re-measuring every render, a sweep
+            // would go dead the moment the first sparkle appeared.
+            useLayoutEffect(measure);
+
+            useEffect(() => {
+                window.addEventListener('resize', measure);
+                window.addEventListener('scroll', measure, true);
+                return () => {
+                    window.removeEventListener('resize', measure);
+                    window.removeEventListener('scroll', measure, true);
+                };
+            }, [measure]);
+
+            const clearHighlights = () => {
+                chunkRefs.current.forEach(entry => entry?.el?.classList.remove('lit'));
+                wordRefs.current.forEach(entry => entry?.el?.classList.remove('lit'));
+            };
+
+            const popSparkle = (rect) => {
+                if (!rect) return;
+                const id = Math.random();
+                setSparkles(prev => [...prev, { id, x: rect.left + rect.width / 2, y: rect.top }]);
+                setTimeout(() => setSparkles(prev => prev.filter(s => s.id !== id)), 1000);
+            };
+
+            const speakWholeWord = (token, seed) => {
+                speak(token.clean, { rate: 0.75, pitch: 1.25, seed: seed || token.clean });
+            };
+
+            // Vertical slack keeps a wobbly 4-year-old finger inside the line. When
+            // a sentence wraps, that slack can make two lines both match, so pick
+            // the vertically nearest rather than the first one in document order.
+            const hitTest = (entries, x, y) => {
+                let best = -1;
+                let bestDistance = Infinity;
+                for (let i = 0; i < entries.length; i++) {
+                    const rect = entries[i]?.rect;
+                    if (!rect) continue;
+                    if (x < rect.left || x > rect.right) continue;
+                    if (y < rect.top - 26 || y > rect.bottom + 26) continue;
+                    const centerY = rect.top + rect.height / 2;
+                    const distance = Math.abs(y - centerY);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        best = i;
+                    }
+                }
+                return best;
+            };
+
+            const handleChunkEnter = (index) => {
+                const entry = chunkRefs.current[index];
+                if (!entry) return;
+
+                // Moving to a different word ends the previous word's attempt and
+                // stops its leftover sounds so the queue doesn't run away.
+                if (entry.wordIndex !== lastWordRef.current) {
+                    stopSpeaking();
+                    touchedRef.current = new Set();
+                    lastWordRef.current = entry.wordIndex;
+                }
+
+                entry.el.classList.add('lit');
+                setTimeout(() => entry.el?.classList.remove('lit'), 650);
+                speak(entry.sound, { rate: 0.55, pitch: 1.1, seed: entry.sound });
+                touchedRef.current.add(entry.chunkIndex);
+
+                // Blend once the whole word has been crossed, not merely when the
+                // finger lands on the last letter.
+                const token = tokens[entry.wordIndex];
+                const isLast = entry.chunkIndex === token.chunks.length - 1;
+                const allTouched = touchedRef.current.size === token.chunks.length;
+                if (isLast && allTouched && !blendedRef.current.has(entry.wordIndex)) {
+                    blendedRef.current.add(entry.wordIndex);
+                    const wordEntry = wordRefs.current[entry.wordIndex];
+                    setTimeout(() => {
+                        speakWholeWord(token);
+                        wordEntry?.el?.classList.add('done');
+                        setTimeout(() => wordEntry?.el?.classList.remove('done'), 600);
+                        popSparkle(wordEntry?.rect);
+                    }, 260);
+                    soundedCountRef.current += 1;
+                    onBadge('sounded_1');
+                    if (soundedCountRef.current >= 10) onBadge('sounded_10');
+                }
+            };
+
+            const handleWordEnter = (index) => {
+                const entry = wordRefs.current[index];
+                const token = tokens[index];
+                if (!entry || !token) return;
+                stopSpeaking();
+                entry.el.classList.add('lit');
+                setTimeout(() => entry.el?.classList.remove('lit'), 700);
+                speakWholeWord(token);
+                popSparkle(entry.rect);
+            };
+
+            const onPointerDown = (e) => {
+                draggingRef.current = true;
+                movedRef.current = false;
+                startPosRef.current = { x: e.clientX, y: e.clientY };
+                lastChunkRef.current = -1;
+                lastWordRef.current = -1;
+                touchedRef.current = new Set();
+                blendedRef.current = new Set();
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+                // Deliberately silent here. Speaking the letter under the finger on
+                // touch-down would make every plain tap say "tuh… little"; the first
+                // sound waits until the finger has actually started moving.
+            };
+
+            const handlePointerAt = (x, y) => {
+                if (mode === 'sound') {
+                    const index = hitTest(chunkRefs.current, x, y);
+                    if (index !== -1 && index !== lastChunkRef.current) {
+                        lastChunkRef.current = index;
+                        handleChunkEnter(index);
+                    }
+                } else {
+                    const index = hitTest(wordRefs.current, x, y);
+                    if (index !== -1 && index !== lastWordRef.current) {
+                        lastWordRef.current = index;
+                        handleWordEnter(index);
+                    }
+                }
+            };
+
+            const onPointerMove = (e) => {
+                if (!draggingRef.current) return;
+                if (Math.abs(e.clientX - startPosRef.current.x) +
+                    Math.abs(e.clientY - startPosRef.current.y) > 8) {
+                    movedRef.current = true;
+                }
+                // Until it counts as a drag, this is still potentially a tap.
+                if (!movedRef.current) return;
+                handlePointerAt(e.clientX, e.clientY);
+            };
+
+            const onPointerUp = (e) => {
+                if (!draggingRef.current) return;
+                draggingRef.current = false;
+                // A tap (no real movement) just says the whole word, in either mode.
+                if (!movedRef.current) {
+                    const wordIndex = hitTest(wordRefs.current, e.clientX, e.clientY);
+                    if (wordIndex !== -1) {
+                        stopSpeaking();
+                        speakWholeWord(tokens[wordIndex]);
+                        popSparkle(wordRefs.current[wordIndex]?.rect);
+                    }
+                }
+                clearHighlights();
+                lastChunkRef.current = -1;
+                lastWordRef.current = -1;
+            };
+
+            const changeMode = (next) => {
+                setMode(next);
+                try { localStorage.setItem(READ_MODE_KEY, next); } catch (e) {}
+                stopSpeaking();
+                speak(next === 'sound'
+                    ? 'Sound it out! Drag your finger slowly over each letter.'
+                    : 'Read along! Slide your finger across the words.', { rate: 0.9 });
+            };
+
+            const readSentence = () => {
+                if (!chapter) return;
+                stopSpeaking();
+                speak(chapter.sentences[sentenceIndex], { rate: 0.7, seed: chapter.title });
+            };
+
+            const openChapter = (chapterData) => {
+                setChapter(chapterData);
+                setSentenceIndex(0);
+                setFinished(false);
+                blendedRef.current = new Set();
+                stopSpeaking();
+                speak(`${chapterData.title}. ${chapterData.sentences[0]}`, { rate: 0.75, seed: chapterData.title });
+            };
+
+            const nextSentence = () => {
+                if (!chapter) return;
+                blendedRef.current = new Set();
+                if (sentenceIndex + 1 < chapter.sentences.length) {
+                    const next = sentenceIndex + 1;
+                    setSentenceIndex(next);
+                    stopSpeaking();
+                    speak(chapter.sentences[next], { rate: 0.7, seed: chapter.title });
+                } else {
+                    setFinished(true);
+                    stopSpeaking();
+                    speak('You read the whole chapter! Great reading!', { rate: 0.95, pitch: 1.4 });
+                    onChapterDone(chapter.id);
+                    onBadge(`chapter_${chapter.id}`);
+                }
+            };
+
+            /* ---- chapter picker ---- */
+            if (!chapter) {
+                return (
+                    <div className="bg-gradient-to-b from-violet-400 via-fuchsia-400 to-pink-300 rounded-3xl p-6">
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-2">
+                            🐾 Sound It Out
+                        </h2>
+                        <p className="text-white text-center mb-6 drop-shadow">
+                            Pick a chapter of the Magical Kittens story.
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
+                            {STORY.map(chapterData => {
+                                const previousDone = chapterData.id === 1 || chaptersDone.includes(chapterData.id - 1);
+                                const done = chaptersDone.includes(chapterData.id);
+                                return (
+                                    <button
+                                        key={chapterData.id}
+                                        data-testid={`chapter-${chapterData.id}`}
+                                        disabled={!previousDone}
+                                        onClick={() => openChapter(chapterData)}
+                                        className={`text-left rounded-3xl p-5 shadow-xl transition-transform ${
+                                            previousDone
+                                                ? 'bg-white hover:scale-105 active:scale-95'
+                                                : 'bg-white bg-opacity-40 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-4xl">{previousDone ? chapterData.emoji : '🔒'}</div>
+                                            <div>
+                                                <div className="font-bold text-purple-700 text-lg">
+                                                    Chapter {chapterData.id}
+                                                </div>
+                                                <div className="text-purple-500">{chapterData.title}</div>
+                                            </div>
+                                            {done && <div className="ml-auto text-3xl">⭐</div>}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
+            /* ---- chapter finished ---- */
+            if (finished) {
+                return (
+                    <div className="bg-gradient-to-b from-violet-400 via-fuchsia-400 to-pink-300 rounded-3xl p-8 text-center">
+                        <div className="text-6xl mb-3">🎉</div>
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg mb-6">
+                            You read Chapter {chapter.id}!
+                        </h2>
+                        <div className="flex justify-center gap-6 flex-wrap mb-8">
+                            {chapter.cast.map(id => (
+                                <KittenCard key={id} kitten={KITTENS.find(k => k.id === id)} />
+                            ))}
+                        </div>
+                        <div className="flex justify-center gap-3 flex-wrap">
+                            <button
+                                onClick={() => openChapter(chapter)}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                🔁 Read it again
+                            </button>
+                            <button
+                                data-testid="back-to-chapters"
+                                onClick={() => { setChapter(null); stopSpeaking(); }}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                📚 Pick another chapter
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            /* ---- reading a sentence ---- */
+            chunkRefs.current = [];
+            wordRefs.current = [];
+            let chunkCounter = 0;
+
+            return (
+                <div className="bg-gradient-to-b from-violet-400 via-fuchsia-400 to-pink-300 rounded-3xl p-6">
+                    <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                        <BackButton onClick={() => { setChapter(null); stopSpeaking(); }} label="← Chapters" />
+                        <h2 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                            {chapter.emoji} {chapter.title}
+                        </h2>
+                        <div className="text-white font-bold drop-shadow">
+                            {sentenceIndex + 1} / {chapter.sentences.length}
+                        </div>
+                    </div>
+
+                    {/* Reading-mode toggle */}
+                    <div className="flex justify-center gap-2 mb-5">
+                        <button
+                            data-testid="mode-sound"
+                            onClick={() => changeMode('sound')}
+                            className={`px-4 py-2 rounded-full font-bold shadow-lg transition-all ${
+                                mode === 'sound'
+                                    ? 'bg-white text-purple-700'
+                                    : 'bg-white bg-opacity-30 hover:bg-opacity-50 text-white'
+                            }`}
+                        >
+                            🐾 Sound It Out
+                        </button>
+                        <button
+                            data-testid="mode-along"
+                            onClick={() => changeMode('along')}
+                            className={`px-4 py-2 rounded-full font-bold shadow-lg transition-all ${
+                                mode === 'along'
+                                    ? 'bg-white text-purple-700'
+                                    : 'bg-white bg-opacity-30 hover:bg-opacity-50 text-white'
+                            }`}
+                        >
+                            👉 Read Along
+                        </button>
+                    </div>
+
+                    <p className="text-center text-white drop-shadow mb-4">
+                        {mode === 'sound'
+                            ? 'Drag your finger slowly over each letter to hear its sound.'
+                            : 'Slide your finger across the words to hear them.'}
+                    </p>
+
+                    <div
+                        ref={containerRef}
+                        data-testid="sentence"
+                        className="readable bg-white rounded-3xl px-5 py-10 shadow-2xl cursor-pointer"
+                        onPointerDown={onPointerDown}
+                        onPointerMove={onPointerMove}
+                        onPointerUp={onPointerUp}
+                        onPointerCancel={onPointerUp}
+                    >
+                        <div className="flex flex-wrap justify-center items-center gap-x-3 gap-y-4 text-[40px] sm:text-[52px] font-bold text-purple-800 leading-relaxed">
+                            {tokens.map((token, wordIndex) => (
+                                <span
+                                    key={wordIndex}
+                                    data-testid={`word-${wordIndex}`}
+                                    className="word"
+                                    ref={el => { wordRefs.current[wordIndex] = { el, rect: null, token }; }}
+                                >
+                                    {token.lead}
+                                    {token.chunks.map((chunk, i) => {
+                                        const flatIndex = chunkCounter++;
+                                        return (
+                                            <span
+                                                key={i}
+                                                data-testid={`chunk-${flatIndex}`}
+                                                className="chunk"
+                                                ref={el => {
+                                                    chunkRefs.current[flatIndex] = {
+                                                        el, rect: null, sound: chunk.sound,
+                                                        wordIndex, chunkIndex: i
+                                                    };
+                                                }}
+                                            >
+                                                {chunk.text}
+                                            </span>
+                                        );
+                                    })}
+                                    {token.trail}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-center gap-3 mt-6 flex-wrap">
+                        <button
+                            data-testid="replay"
+                            onClick={readSentence}
+                            className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                        >
+                            🔊 Read it to me
+                        </button>
+                        <button
+                            data-testid="next-sentence"
+                            onClick={nextSentence}
+                            className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                        >
+                            {sentenceIndex + 1 < chapter.sentences.length ? 'Next →' : 'Finish 🎉'}
+                        </button>
+                    </div>
+
+                    {sparkles.map(s => (
+                        <div
+                            key={s.id}
+                            className="sparkle fixed text-4xl pointer-events-none z-40"
+                            style={{ left: s.x, top: s.y }}
+                        >✨</div>
+                    ))}
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Module 2 — Flash Cards
+         * ------------------------------------------------------------------ */
+
+        const pickDistractors = (word, pool, count) => {
+            const others = pool.filter(w => w !== word);
+            const picked = [];
+            while (picked.length < count && others.length) {
+                const index = Math.floor(Math.random() * others.length);
+                picked.push(others.splice(index, 1)[0]);
+            }
+            return picked;
+        };
+
+        const shuffle = (list) => {
+            const copy = [...list];
+            for (let i = copy.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [copy[i], copy[j]] = [copy[j], copy[i]];
+            }
+            return copy;
+        };
+
+        const FlashCardsGame = ({ onBadge, chaptersDone, streaks, onStreakChange }) => {
+            const [deck, setDeck] = useState(null);           // null | 'alone' | 'grownup'
+            const [word, setWord] = useState(null);
+            const [choices, setChoices] = useState([]);
+            const [flipped, setFlipped] = useState(false);
+            const [message, setMessage] = useState('');
+            const [kitten, setKitten] = useState(KITTENS[0]);
+
+            const pool = wordsUnlockedBy(chaptersDone);
+
+            // Words she hasn't mastered come up more often than ones she has.
+            const drawWord = useCallback(() => {
+                const weighted = [];
+                pool.forEach(w => {
+                    const streak = streaks[w] || 0;
+                    const weight = streak >= MASTERY_STREAK ? 1 : (MASTERY_STREAK + 1 - streak) * 2;
+                    for (let i = 0; i < weight; i++) weighted.push(w);
+                });
+                return weighted[Math.floor(Math.random() * weighted.length)] || pool[0];
+            }, [pool, streaks]);
+
+            const nextCard = useCallback((deckKind, announce = true) => {
+                const next = drawWord();
+                const speaker = KITTENS[Math.floor(Math.random() * KITTENS.length)];
+                setWord(next);
+                setKitten(speaker);
+                setFlipped(false);
+                setMessage('');
+                if (deckKind === 'alone') {
+                    setChoices(shuffle([next, ...pickDistractors(next, pool, 2)]));
+                    if (announce) {
+                        stopSpeaking();
+                        setTimeout(() => speak(`Find the word... ${next}`, { rate: 0.75, gender: speaker.gender, seed: speaker.name }), 120);
+                    }
+                } else {
+                    setChoices([]);
+                    if (announce) {
+                        stopSpeaking();
+                        speak('Can you read this word?', { rate: 0.85, gender: speaker.gender, seed: speaker.name });
+                    }
+                }
+            }, [drawWord, pool]);
+
+            const startDeck = (kind) => {
+                setDeck(kind);
+                nextCard(kind);
+            };
+
+            const sayWord = () => {
+                if (!word) return;
+                stopSpeaking();
+                speak(word, { rate: 0.7, gender: kitten.gender, seed: kitten.name });
+            };
+
+            const recordAnswer = (correct) => {
+                const current = streaks[word] || 0;
+                const updated = correct ? current + 1 : 0;
+                onStreakChange(word, updated);
+                onBadge('cards_1');
+            };
+
+            const handlePick = (picked) => {
+                if (picked === word) {
+                    recordAnswer(true);
+                    setMessage('correct');
+                    stopSpeaking();
+                    speak(`Yes! That says ${word}. Great reading!`, { rate: 0.9, pitch: 1.4, gender: kitten.gender, seed: kitten.name });
+                    setTimeout(() => nextCard('alone'), 1900);
+                } else {
+                    recordAnswer(false);
+                    setMessage(`nope:${picked}`);
+                    stopSpeaking();
+                    speak(`That one says ${picked}. Try again! Find ${word}.`, { rate: 0.8, gender: kitten.gender, seed: kitten.name });
+                }
+            };
+
+            const handleFlip = () => {
+                setFlipped(true);
+                sayWord();
+            };
+
+            const handleSelfReport = (knewIt) => {
+                recordAnswer(knewIt);
+                stopSpeaking();
+                speak(knewIt ? 'Super reading!' : 'No problem. We will see it again soon.',
+                    { rate: 0.95, pitch: knewIt ? 1.4 : 1.2, gender: kitten.gender, seed: kitten.name });
+                setTimeout(() => nextCard('grownup'), 1200);
+            };
+
+            /* ---- deck picker ---- */
+            if (!deck) {
+                return (
+                    <div className="bg-gradient-to-b from-sky-400 via-cyan-400 to-teal-300 rounded-3xl p-6">
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-2">
+                            🃏 Kitten Flash Cards
+                        </h2>
+                        <p className="text-white text-center mb-6 drop-shadow">
+                            {pool.length} words ready. More unlock as you read the story!
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
+                            <button
+                                data-testid="deck-alone"
+                                onClick={() => startDeck('alone')}
+                                className="bg-white rounded-3xl p-6 shadow-xl hover:scale-105 active:scale-95 transition-transform text-center"
+                            >
+                                <div className="text-5xl mb-2">🎮</div>
+                                <div className="font-bold text-purple-700 text-xl">Play Alone</div>
+                                <div className="text-purple-500 text-sm mt-1">
+                                    A kitten says a word — tap the right one.
+                                </div>
+                            </button>
+                            <button
+                                data-testid="deck-grownup"
+                                onClick={() => startDeck('grownup')}
+                                className="bg-white rounded-3xl p-6 shadow-xl hover:scale-105 active:scale-95 transition-transform text-center"
+                            >
+                                <div className="text-5xl mb-2">👨‍👩‍👧</div>
+                                <div className="font-bold text-purple-700 text-xl">Read with a Grown-Up</div>
+                                <div className="text-purple-500 text-sm mt-1">
+                                    Read it out loud, then flip to check.
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            /* ---- play alone ---- */
+            if (deck === 'alone') {
+                return (
+                    <div className="bg-gradient-to-b from-sky-400 via-cyan-400 to-teal-300 rounded-3xl p-6">
+                        <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+                            <BackButton onClick={() => { setDeck(null); stopSpeaking(); }} label="← Decks" />
+                            <h2 className="text-2xl font-bold text-white drop-shadow-lg">🎮 Play Alone</h2>
+                            <div className="w-[80px]" />
+                        </div>
+
+                        <div className="flex flex-col items-center gap-4 mb-6">
+                            <div className="bob"><KittenFace kitten={kitten} size={110} /></div>
+                            <button
+                                data-testid="say-again"
+                                onClick={() => { stopSpeaking(); speak(`Find the word... ${word}`, { rate: 0.75, gender: kitten.gender, seed: kitten.name }); }}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                🔊 Say it again
+                            </button>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-3 max-w-3xl mx-auto">
+                            {choices.map(choice => (
+                                <button
+                                    key={choice}
+                                    data-testid={`choice-${choice}`}
+                                    onClick={() => handlePick(choice)}
+                                    className={`rounded-3xl py-10 text-4xl font-bold shadow-xl transition-transform hover:scale-105 active:scale-95 ${
+                                        message === 'correct' && choice === word
+                                            ? 'bg-green-300 text-green-900'
+                                            : message === `nope:${choice}`
+                                                ? 'bg-orange-200 text-orange-900'
+                                                : 'bg-white text-purple-700'
+                                    }`}
+                                >
+                                    {choice}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div data-testid="feedback" className="text-center text-white font-bold text-xl drop-shadow mt-6 min-h-[32px]">
+                            {message === 'correct' && `🎉 Yes! That says "${word}"!`}
+                            {message.startsWith('nope:') && `That one says "${message.slice(5)}" — try again!`}
+                        </div>
+                    </div>
+                );
+            }
+
+            /* ---- read with a grown-up ---- */
+            return (
+                <div className="bg-gradient-to-b from-sky-400 via-cyan-400 to-teal-300 rounded-3xl p-6">
+                    <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+                        <BackButton onClick={() => { setDeck(null); stopSpeaking(); }} label="← Decks" />
+                        <h2 className="text-2xl font-bold text-white drop-shadow-lg">👨‍👩‍👧 Read with a Grown-Up</h2>
+                        <div className="w-[80px]" />
+                    </div>
+
+                    <div className="flip max-w-md mx-auto" style={{ height: 240 }}>
+                        <div
+                            data-testid="flip-card"
+                            className={`flip-inner w-full h-full cursor-pointer ${flipped ? 'flipped' : ''}`}
+                            onClick={() => (flipped ? sayWord() : handleFlip())}
+                        >
+                            <div className="flip-face bg-white shadow-2xl">
+                                <span className="text-6xl font-bold text-purple-700">{word}</span>
+                            </div>
+                            <div className="flip-face flip-back bg-yellow-100 shadow-2xl flex-col gap-2">
+                                <span className="text-5xl font-bold text-purple-700">{word}</span>
+                                <span className="text-purple-500">tap to hear it again</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p className="text-center text-white drop-shadow mt-5">
+                        {flipped
+                            ? 'How did that go?'
+                            : 'Read the word out loud, then tap the card to check.'}
+                    </p>
+
+                    {flipped && (
+                        <div className="flex justify-center gap-3 mt-5 flex-wrap">
+                            <button
+                                data-testid="knew-it"
+                                onClick={() => handleSelfReport(true)}
+                                className="bg-green-300 text-green-900 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                👍 I knew it!
+                            </button>
+                            <button
+                                data-testid="practice-again"
+                                onClick={() => handleSelfReport(false)}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                🔁 Practice again
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Word wall
+         * ------------------------------------------------------------------ */
+
+        const WordWall = ({ streaks, chaptersDone }) => {
+            const unlocked = new Set(wordsUnlockedBy(chaptersDone));
+            const mastered = DOLCH_PREPRIMER.filter(w => (streaks[w] || 0) >= MASTERY_STREAK).length;
+            return (
+                <div className="bg-gradient-to-b from-amber-300 via-orange-300 to-rose-300 rounded-3xl p-6">
+                    <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-1">⭐ Word Wall</h2>
+                    <p className="text-center text-white drop-shadow mb-6" data-testid="mastered-count">
+                        {mastered} of {DOLCH_PREPRIMER.length} words mastered
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                        {DOLCH_PREPRIMER.map(w => {
+                            const streak = streaks[w] || 0;
+                            const isMastered = streak >= MASTERY_STREAK;
+                            return (
+                                <button
+                                    key={w}
+                                    data-testid={`wall-${w}`}
+                                    onClick={() => { stopSpeaking(); speak(w, { rate: 0.7 }); }}
+                                    className={`px-5 py-3 rounded-2xl font-bold text-xl shadow-lg transition-transform hover:scale-105 ${
+                                        isMastered
+                                            ? 'bg-yellow-200 text-yellow-900'
+                                            : unlocked.has(w)
+                                                ? 'bg-white text-purple-700'
+                                                : 'bg-white bg-opacity-40 text-purple-400'
+                                    }`}
+                                >
+                                    {isMastered ? '⭐ ' : ''}{w}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Badges view
+         * ------------------------------------------------------------------ */
+
+        const BadgesView = ({ unlockedBadges }) => (
+            <div className="bg-gradient-to-b from-indigo-400 via-purple-400 to-pink-300 rounded-3xl p-6">
+                <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-6">🏅 Badges</h2>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 max-w-4xl mx-auto">
+                    {BADGES.map(badge => {
+                        const earned = unlockedBadges.includes(badge.id);
+                        return (
+                            <div
+                                key={badge.id}
+                                className={`rounded-3xl p-5 text-center shadow-xl ${
+                                    earned ? 'bg-white' : 'bg-white bg-opacity-40'
+                                }`}
+                            >
+                                <div className={`text-5xl mb-2 ${earned ? '' : 'grayscale opacity-60'}`}>
+                                    {earned ? badge.emoji : '🔒'}
+                                </div>
+                                <div className="font-bold text-purple-700">{badge.name}</div>
+                                <div className="text-purple-500 text-sm">{badge.description}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+
+        /* ------------------------------------------------------------------ *
+         * Landing page
+         * ------------------------------------------------------------------ */
+
+        const LandingPage = ({ onSelectModule, chaptersDone, mastered }) => {
+            const modules = [
+                { id: 'read',   name: 'Sound It Out',  emoji: '🐾', color: 'from-violet-400 to-fuchsia-500', description: 'Drag your finger over the words of the Magical Kittens story.' },
+                { id: 'cards',  name: 'Flash Cards',   emoji: '🃏', color: 'from-sky-400 to-teal-500',       description: 'Sight words from the story — play alone or with a grown-up.' },
+                { id: 'wall',   name: 'Word Wall',     emoji: '⭐', color: 'from-amber-400 to-rose-400',     description: `${mastered} of ${DOLCH_PREPRIMER.length} words mastered.` },
+                { id: 'badges', name: 'Badges',        emoji: '🏅', color: 'from-indigo-400 to-purple-500',  description: `Collect ${BADGES.length} kitten badges!` }
+            ];
+
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-purple-400 via-pink-400 to-amber-300 p-6 sm:p-8">
+                    <div className="flex justify-end max-w-5xl mx-auto mb-2">
+                        <MuteButton />
+                    </div>
+
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl sm:text-5xl font-bold text-white drop-shadow-lg mb-2">
+                            🐱 Magical Kittens Reading
+                        </h1>
+                        <p className="text-white text-lg drop-shadow">
+                            Three little kittens with superpowers. Let's read their story!
+                        </p>
+                    </div>
+
+                    <div className="flex justify-center gap-6 flex-wrap mb-10">
+                        {KITTENS.map(kitten => <KittenCard key={kitten.id} kitten={kitten} size={110} />)}
+                    </div>
+
+                    <div className="grid gap-5 sm:grid-cols-2 max-w-4xl mx-auto">
+                        {modules.map(module => (
+                            <button
+                                key={module.id}
+                                data-testid={`module-${module.id}`}
+                                onClick={() => onSelectModule(module.id)}
+                                className={`bg-gradient-to-br ${module.color} rounded-3xl p-6 text-left shadow-xl
+                                    hover:scale-105 active:scale-95 transition-transform`}
+                            >
+                                <div className="text-5xl mb-2">{module.emoji}</div>
+                                <div className="text-2xl font-bold text-white drop-shadow">{module.name}</div>
+                                <div className="text-white text-sm mt-1 drop-shadow">{module.description}</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="text-center mt-10">
+                        <a href="../" className="text-white underline drop-shadow">← All games</a>
+                    </div>
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * App
+         * ------------------------------------------------------------------ */
+
+        const App = () => {
+            const [module, setModule] = useState('landing');
+            const [chaptersDone, setChaptersDone] = useState([]);
+            const [streaks, setStreaks] = useState({});
+            const [unlockedBadges, setUnlockedBadges] = useState([]);
+            const [newBadge, setNewBadge] = useState(null);
+            const [loaded, setLoaded] = useState(false);
+
+            // Saving needs the current value, and saving is a side effect, so it
+            // must not happen inside a state updater (React may re-run those).
+            // Keep refs in sync with state and read the refs when saving.
+            const badgesRef = useRef([]);
+            const chaptersDoneRef = useRef([]);
+            const streaksRef = useRef({});
+
+            useEffect(() => {
+                (async () => {
+                    const story = await loadProgress('story');
+                    const words = await loadProgress('words');
+                    const badges = await loadBadges();
+                    chaptersDoneRef.current = story?.chaptersDone || [];
+                    streaksRef.current = words?.streaks || {};
+                    badgesRef.current = badges;
+                    setChaptersDone(chaptersDoneRef.current);
+                    setStreaks(streaksRef.current);
+                    setUnlockedBadges(badges);
+                    setLoaded(true);
+                })();
+            }, []);
+
+            useEffect(() => {
+                // Voices load asynchronously in Chrome; touching getVoices() here
+                // means the first spoken line already has a good voice available.
+                if ('speechSynthesis' in window) speechSynthesis.getVoices();
+            }, []);
+
+            const handleBadge = useCallback(async (condition) => {
+                const badge = await checkAndUnlockBadge(condition, badgesRef.current);
+                if (badge) {
+                    badgesRef.current = [...badgesRef.current, badge.id];
+                    setUnlockedBadges(badgesRef.current);
+                    setNewBadge(badge);
+                }
+            }, []);
+
+            const handleChapterDone = useCallback((chapterId) => {
+                if (chaptersDoneRef.current.includes(chapterId)) return;
+                const next = [...chaptersDoneRef.current, chapterId].sort((a, b) => a - b);
+                chaptersDoneRef.current = next;
+                setChaptersDone(next);
+                saveProgress('story', { chaptersDone: next });
+            }, []);
+
+            const handleStreakChange = useCallback((word, value) => {
+                const next = { ...streaksRef.current, [word]: value };
+                streaksRef.current = next;
+                setStreaks(next);
+                saveProgress('words', { streaks: next });
+            }, []);
+
+            useEffect(() => {
+                if (!loaded) return;
+                const mastered = DOLCH_PREPRIMER.filter(w => (streaks[w] || 0) >= MASTERY_STREAK).length;
+                if (mastered >= 10) handleBadge('mastered_10');
+                if (mastered >= DOLCH_PREPRIMER.length) handleBadge('mastered_all');
+            }, [streaks, loaded, handleBadge]);
+
+            const masteredCount = DOLCH_PREPRIMER.filter(w => (streaks[w] || 0) >= MASTERY_STREAK).length;
+
+            if (!loaded) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-b from-purple-400 via-pink-400 to-amber-300 flex items-center justify-center">
+                        <div className="text-6xl bob">🐱</div>
+                    </div>
+                );
+            }
+
+            if (module === 'landing') {
+                return (
+                    <React.Fragment>
+                        <LandingPage
+                            onSelectModule={setModule}
+                            chaptersDone={chaptersDone}
+                            mastered={masteredCount}
+                        />
+                        {newBadge && <BadgePopup badge={newBadge} onClose={() => setNewBadge(null)} />}
+                    </React.Fragment>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-purple-400 via-pink-400 to-amber-300 p-4 sm:p-6">
+                    <div className="flex justify-between items-center max-w-5xl mx-auto mb-4">
+                        <RoundIconButton
+                            onClick={() => { setModule('landing'); stopSpeaking(); }}
+                            title="Home"
+                        >🏠</RoundIconButton>
+                        <MuteButton />
+                    </div>
+
+                    <div className="max-w-5xl mx-auto">
+                        {module === 'read' && (
+                            <SoundItOutGame
+                                onBadge={handleBadge}
+                                onChapterDone={handleChapterDone}
+                                chaptersDone={chaptersDone}
+                            />
+                        )}
+                        {module === 'cards' && (
+                            <FlashCardsGame
+                                onBadge={handleBadge}
+                                chaptersDone={chaptersDone}
+                                streaks={streaks}
+                                onStreakChange={handleStreakChange}
+                            />
+                        )}
+                        {module === 'wall' && <WordWall streaks={streaks} chaptersDone={chaptersDone} />}
+                        {module === 'badges' && <BadgesView unlockedBadges={unlockedBadges} />}
+                    </div>
+
+                    {newBadge && <BadgePopup badge={newBadge} onClose={() => setNewBadge(null)} />}
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
