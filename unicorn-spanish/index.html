@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unicorn Spanish</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        * { box-sizing: border-box; }
+
+        /* Memory card flip */
+        .card3d { perspective: 1000px; }
+        .card3d-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transition: transform .45s ease;
+        }
+        .card3d-inner.face-up { transform: rotateY(180deg); }
+        .card3d-face {
+            position: absolute;
+            inset: 0;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 18px;
+            overflow: hidden;
+            text-align: center;
+        }
+        .card3d-back { transform: rotateY(180deg); }
+        @keyframes matched-pop {
+            0%   { transform: scale(1); }
+            45%  { transform: scale(1.12) rotate(-3deg); }
+            100% { transform: scale(1); }
+        }
+        .matched { animation: matched-pop .5s ease; }
+
+        /* Unicorns */
+        @keyframes float-bob {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50%      { transform: translateY(-10px) rotate(2deg); }
+        }
+        .bob { animation: float-bob 3s ease-in-out infinite; }
+        @keyframes aura-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 currentColor, 0 0 24px 2px currentColor; }
+            50%      { box-shadow: 0 0 0 8px rgba(255,255,255,.15), 0 0 44px 8px currentColor; }
+        }
+        .aura { animation: aura-pulse 2.4s ease-in-out infinite; }
+        @keyframes pop-in {
+            from { opacity: 0; transform: scale(.3) translateY(20px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .pop-in { animation: pop-in .45s cubic-bezier(.34, 1.56, .64, 1); }
+        @keyframes sparkle-rise {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to   { opacity: 0; transform: translateY(-70px) scale(1.6); }
+        }
+        .sparkle { animation: sparkle-rise 1s ease-out forwards; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        /* ------------------------------------------------------------------ *
+         * Storage
+         * ------------------------------------------------------------------ */
+
+        const DB_NAME = 'UnicornSpanishGame';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'gameProgress';
+
+        const initDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+            });
+        };
+
+        // Every save is read-existing -> merge -> write on the same record, so two
+        // saves firing close together (finishing a level also masters a number and
+        // may unlock a badge) would clobber each other's fields. Serialize them.
+        let writeQueue = Promise.resolve();
+        const enqueueWrite = (fn) => {
+            const run = writeQueue.then(fn, fn);
+            writeQueue = run.catch(() => {});
+            return run;
+        };
+
+        // Reads a key from a store that's already part of an open transaction.
+        // IMPORTANT: don't read through a helper that opens its own connection —
+        // awaiting a fresh indexedDB.open() crosses a task boundary, and an
+        // IndexedDB transaction auto-commits once it has gone idle waiting on
+        // unrelated async work. The follow-up put() would then throw
+        // TransactionInactiveError and the write would be silently dropped.
+        const getFromStore = (store, key) => new Promise((resolve, reject) => {
+            const request = store.get(key);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+
+        const saveProgress = (recordId, data) => enqueueWrite(async () => {
+            try {
+                const db = await initDB();
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+
+                const existing = await getFromStore(store, recordId);
+                const record = {
+                    id: recordId,
+                    ...(existing || {}),
+                    ...data,
+                    lastUpdated: new Date().toISOString()
+                };
+
+                store.put(record);
+                return new Promise((resolve, reject) => {
+                    transaction.oncomplete = () => resolve();
+                    transaction.onerror = () => reject(transaction.error);
+                });
+            } catch (error) {
+                console.error('Error saving progress:', error);
+            }
+        });
+
+        const loadProgress = async (recordId) => {
+            try {
+                const db = await initDB();
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(recordId);
+
+                return new Promise((resolve, reject) => {
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            } catch (error) {
+                console.error('Error loading progress:', error);
+                return null;
+            }
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Speech — English for instructions, Spanish for the words being taught
+         * ------------------------------------------------------------------ */
+
+        const VOICE_GENDER = {
+            'Microsoft David - English (United States)': 'male',
+            'Microsoft Mark - English (United States)': 'male',
+            'Microsoft Zira - English (United States)': 'female',
+            'Microsoft Guy Online (Natural) - English (United States)': 'male',
+            'Microsoft Andrew Online (Natural) - English (United States)': 'male',
+            'Microsoft Christopher Online (Natural) - English (United States)': 'male',
+            'Microsoft Eric Online (Natural) - English (United States)': 'male',
+            'Microsoft Roger Online (Natural) - English (United States)': 'male',
+            'Microsoft Brian Online (Natural) - English (United States)': 'male',
+            'Microsoft Davis Online (Natural) - English (United States)': 'male',
+            'Microsoft Ava Online (Natural) - English (United States)': 'female',
+            'Microsoft Emma Online (Natural) - English (United States)': 'female',
+            'Microsoft Jenny Online (Natural) - English (United States)': 'female',
+            'Microsoft Michelle Online (Natural) - English (United States)': 'female',
+            'Microsoft Aria Online (Natural) - English (United States)': 'female',
+            'Microsoft Sara Online (Natural) - English (United States)': 'female',
+            'Google US English': 'female',
+            'Google UK English Male': 'male',
+            'Google UK English Female': 'female',
+            'Samantha': 'female', 'Victoria': 'female', 'Karen': 'female', 'Moira': 'female', 'Tessa': 'female',
+            'Alex': 'male', 'Fred': 'male', 'Daniel': 'male', 'Oliver': 'male',
+            'Paulina': 'female', 'Monica': 'female', 'Angelica': 'female', 'Juan': 'male', 'Diego': 'male', 'Jorge': 'male'
+        };
+
+        const classifyVoiceGender = (voice) => {
+            if (VOICE_GENDER[voice.name]) return VOICE_GENDER[voice.name];
+            if (/female/i.test(voice.name)) return 'female';
+            if (/\bmale\b/i.test(voice.name)) return 'male';
+            return 'unknown';
+        };
+
+        const voiceQualityRank = (voice) => {
+            if (/natural|online|neural/i.test(voice.name)) return 3;
+            if (voice.name === 'Google US English' || voice.name === 'Samantha') return 2;
+            if (voice.localService) return 1;
+            return 0;
+        };
+
+        const hashString = (str) => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+            return Math.abs(hash);
+        };
+
+        // Latin American Spanish first, then any Spanish at all. Ordered most to
+        // least preferred: whichever tag appears earliest and exists on the device
+        // wins, so a phone with only es-ES still gets a real Spanish voice rather
+        // than falling through to English.
+        const SPANISH_LANGS = ['es-MX', 'es-US', 'es-419', 'es-CO', 'es-AR', 'es'];
+        const ENGLISH_LANGS = ['en'];
+
+        const voicesFor = (langPrefixes) => {
+            if (!('speechSynthesis' in window)) return [];
+            const voices = speechSynthesis.getVoices() || [];
+            for (const prefix of langPrefixes) {
+                // Browsers report either es-MX or es_MX depending on platform.
+                const matching = voices.filter(v => v.lang && v.lang.replace('_', '-').startsWith(prefix));
+                if (matching.length) return matching;
+            }
+            return [];
+        };
+
+        // Picks the best-quality voice for a language and gender, varied by `seed`
+        // so each unicorn keeps its own voice instead of all three sounding alike.
+        const getBestVoice = (gender, seed, langPrefixes = ENGLISH_LANGS) => {
+            if (!('speechSynthesis' in window)) return null;
+            const all = speechSynthesis.getVoices();
+            if (!all || !all.length) return null;
+
+            const pool = voicesFor(langPrefixes);
+            // No voice in the requested language: return null and let the browser
+            // use its default rather than deliberately picking a wrong-language one.
+            if (!pool.length) return null;
+
+            let candidates = pool;
+            if (gender) {
+                const matching = pool.filter(v => classifyVoiceGender(v) === gender);
+                if (matching.length) candidates = matching;
+            }
+
+            const bestRank = Math.max(...candidates.map(voiceQualityRank));
+            const topTier = candidates.filter(v => voiceQualityRank(v) === bestRank);
+
+            if (topTier.length === 1 || !seed) return topTier[0];
+            return topTier[hashString(seed) % topTier.length];
+        };
+
+        const hasSpanishVoice = () => voicesFor(SPANISH_LANGS).length > 0;
+
+        // Global mute state, shared across every module's speak() call. A plain
+        // module-level variable (not React state) so speak() always reads the live
+        // value without every component needing to re-render on toggle.
+        let isMuted = (() => {
+            try { return localStorage.getItem('uni_muted') === 'true'; } catch (e) { return false; }
+        })();
+        const muteListeners = new Set();
+        const setGlobalMuted = (value) => {
+            isMuted = value;
+            try { localStorage.setItem('uni_muted', value ? 'true' : 'false'); } catch (e) {}
+            if (value && 'speechSynthesis' in window) {
+                speechSynthesis.cancel();
+                // Chrome occasionally fails to stop an in-flight utterance on the first cancel() call.
+                setTimeout(() => { if (speechSynthesis.speaking) speechSynthesis.cancel(); }, 50);
+            }
+            muteListeners.forEach(fn => fn(value));
+        };
+        const useMuted = () => {
+            const [muted, setMuted] = useState(isMuted);
+            useEffect(() => {
+                muteListeners.add(setMuted);
+                return () => muteListeners.delete(setMuted);
+            }, []);
+            return muted;
+        };
+
+        // The one place utterances are made. Speaking is ON by default; the 🔊
+        // button is the only thing that turns it off.
+        const speakIn = (text, langPrefixes, options = {}) => {
+            if (isMuted) return;
+            if (!('speechSynthesis' in window)) return;
+            const { rate = 1, pitch = 1.2, volume = 0.9, gender = 'female', seed = null } = options;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = rate;
+            utterance.pitch = pitch;
+            utterance.volume = volume;
+            utterance.lang = langPrefixes[0];
+            const voice = getBestVoice(gender, seed, langPrefixes);
+            // No voice for this language? Still speak it. Setting utterance.lang
+            // gives the browser its best shot, and an anglicised "cinco" beats
+            // silence — the landing page tells the grown-up how to fix it.
+            if (voice) utterance.voice = voice;
+            speechSynthesis.speak(utterance);
+        };
+
+        // English: instructions, praise, everything the child already understands.
+        const speak = (text, options = {}) => speakIn(text, ENGLISH_LANGS, options);
+
+        // Spanish: the words being taught. Slower by default — this is the new
+        // language, and a learner needs the extra beat.
+        const speakEs = (text, options = {}) =>
+            speakIn(text, SPANISH_LANGS, { rate: 0.75, pitch: 1.15, ...options });
+
+        const stopSpeaking = () => {
+            if ('speechSynthesis' in window) speechSynthesis.cancel();
+        };
+
+        // Says the English word, then the Spanish one, with a gap between so the
+        // two don't run together. Returns nothing; the browser queues them.
+        const speakPair = (english, spanish, options = {}) => {
+            speak(english, options);
+            speakEs(spanish, options);
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Numbers
+         * ------------------------------------------------------------------ */
+
+        const SPANISH_NUMBERS = {
+            1: 'uno', 2: 'dos', 3: 'tres', 4: 'cuatro', 5: 'cinco',
+            6: 'seis', 7: 'siete', 8: 'ocho', 9: 'nueve', 10: 'diez',
+            11: 'once', 12: 'doce', 13: 'trece', 14: 'catorce', 15: 'quince',
+            16: 'dieciséis', 17: 'diecisiete', 18: 'dieciocho', 19: 'diecinueve', 20: 'veinte',
+            30: 'treinta', 40: 'cuarenta', 50: 'cincuenta', 60: 'sesenta',
+            70: 'setenta', 80: 'ochenta', 90: 'noventa', 100: 'cien'
+        };
+
+        const range = (from, to, step = 1) => {
+            const out = [];
+            for (let n = from; n <= to; n += step) out.push(n);
+            return out;
+        };
+
+        // The ladder: master ten numbers at a time, then jump by tens to reach 100.
+        // Thirty-ish words instead of a hundred, and it still gets to cien.
+        const LEVELS = [
+            {
+                id: 1,
+                name: 'One to Ten',
+                spanishName: 'Uno a Diez',
+                emoji: '🦄',
+                numbers: range(1, 10),
+                color: 'from-pink-400 to-fuchsia-500'
+            },
+            {
+                id: 2,
+                name: 'Eleven to Twenty',
+                spanishName: 'Once a Veinte',
+                emoji: '🌈',
+                numbers: range(11, 20),
+                color: 'from-violet-400 to-indigo-500'
+            },
+            {
+                id: 3,
+                name: 'Count by Tens to 100',
+                spanishName: 'Cuenta de Diez en Diez',
+                emoji: '⭐',
+                numbers: range(10, 100, 10),
+                color: 'from-amber-400 to-orange-500'
+            }
+        ];
+
+        // Every number the game teaches, in ladder order and without repeats
+        // (diez is both the end of level 1 and the start of level 3).
+        const ALL_NUMBERS = LEVELS.reduce((acc, level) => {
+            level.numbers.forEach(n => { if (!acc.includes(n)) acc.push(n); });
+            return acc;
+        }, []);
+
+        const MASTERY_STREAK = 3;
+
+        /* ------------------------------------------------------------------ *
+         * Memory vocabulary — English on one card, Spanish on the other
+         * ------------------------------------------------------------------ */
+
+        const WORD_PAIRS = [
+            { id: 'unicorn', icon: '🦄', english: 'unicorn', spanish: 'unicornio' },
+            { id: 'rainbow', icon: '🌈', english: 'rainbow', spanish: 'arcoíris' },
+            { id: 'star',    icon: '⭐', english: 'star',    spanish: 'estrella' },
+            { id: 'moon',    icon: '🌙', english: 'moon',    spanish: 'luna' },
+            { id: 'flower',  icon: '🌸', english: 'flower',  spanish: 'flor' },
+            { id: 'crown',   icon: '👑', english: 'crown',   spanish: 'corona' },
+            { id: 'cloud',   icon: '☁️', english: 'cloud',   spanish: 'nube' },
+            { id: 'cake',    icon: '🍰', english: 'cake',    spanish: 'pastel' },
+            { id: 'heart',   icon: '💖', english: 'heart',   spanish: 'corazón' },
+            { id: 'sun',     icon: '☀️', english: 'sun',     spanish: 'sol' },
+            { id: 'red',     icon: '🔴', english: 'red',     spanish: 'rojo' },
+            { id: 'blue',    icon: '🔵', english: 'blue',    spanish: 'azul' },
+            { id: 'yellow',  icon: '🟡', english: 'yellow',  spanish: 'amarillo' },
+            { id: 'green',   icon: '🟢', english: 'green',   spanish: 'verde' },
+            { id: 'purple',  icon: '🟣', english: 'purple',  spanish: 'morado' }
+        ];
+
+        const DECK_SIZES = [
+            { id: 'easy',   label: 'Easy',   emoji: '🦄', pairs: 4 },
+            { id: 'medium', label: 'Medium', emoji: '🌈', pairs: 6 },
+            { id: 'hard',   label: 'Hard',   emoji: '⭐', pairs: 8 }
+        ];
+
+        /* ------------------------------------------------------------------ *
+         * Characters
+         * ------------------------------------------------------------------ */
+
+        // Spanish names, so the cast is vocabulary too.
+        const UNICORNS = [
+            { id: 'estrella', name: 'Estrella', meaning: 'Star',    color: '#ec4899', hue: 0 },
+            { id: 'luna',     name: 'Luna',     meaning: 'Moon',    color: '#6366f1', hue: 200 },
+            { id: 'arcoiris', name: 'Arcoíris', meaning: 'Rainbow', color: '#f59e0b', hue: 90 }
+        ];
+
+        const UnicornFace = ({ unicorn, size = 96, showAura = true }) => (
+            <div
+                className={`rounded-full flex items-center justify-center bg-white ${showAura ? 'aura' : ''}`}
+                style={{
+                    width: size, height: size, color: unicorn.color,
+                    border: `4px solid ${unicorn.color}`,
+                    fontSize: size * 0.55
+                }}
+                title={`${unicorn.name} — ${unicorn.meaning}`}
+            >
+                <span role="img" aria-label={unicorn.name} style={{ filter: `hue-rotate(${unicorn.hue}deg)` }}>🦄</span>
+            </div>
+        );
+
+        const UnicornCard = ({ unicorn, size = 96 }) => (
+            <div className="flex flex-col items-center gap-1">
+                <div className="bob"><UnicornFace unicorn={unicorn} size={size} /></div>
+                <div className="font-bold text-white drop-shadow">{unicorn.name}</div>
+                <div className="text-sm text-white drop-shadow">{unicorn.meaning}</div>
+            </div>
+        );
+
+        /* ------------------------------------------------------------------ *
+         * Badges
+         * ------------------------------------------------------------------ */
+
+        const BADGES = [
+            { id: 'first_word',    name: 'First Word',      emoji: '🗣️', description: 'Heard your first Spanish number!', condition: 'spoke_1' },
+            { id: 'level_1',       name: 'Uno a Diez',      emoji: '🦄', description: 'Finished One to Ten!',            condition: 'level_1' },
+            { id: 'level_2',       name: 'Once a Veinte',   emoji: '🌈', description: 'Finished Eleven to Twenty!',      condition: 'level_2' },
+            { id: 'level_3',       name: 'Hasta Cien',      emoji: '💯', description: 'Counted all the way to 100!',     condition: 'level_3' },
+            { id: 'ten_mastered',  name: 'Number Wizard',   emoji: '⭐', description: 'Mastered 10 numbers!',            condition: 'mastered_10' },
+            { id: 'all_mastered',  name: 'Súper Contador',  emoji: '🏆', description: 'Mastered every number!',          condition: 'mastered_all' },
+            { id: 'first_memory',  name: 'Memory Unicorn',  emoji: '🧠', description: 'Finished your first memory game!', condition: 'memory_1' },
+            { id: 'perfect_memory',name: 'Perfect Memory',  emoji: '💎', description: 'Cleared a board with no mistakes!', condition: 'memory_perfect' }
+        ];
+
+        const saveBadges = (badges) => saveProgress('badges', { unlockedBadges: badges });
+        const loadBadges = async () => (await loadProgress('badges'))?.unlockedBadges || [];
+
+        const checkAndUnlockBadge = async (condition, currentBadges) => {
+            const badge = BADGES.find(b => b.condition === condition);
+            if (badge && !currentBadges.includes(badge.id)) {
+                const newBadges = [...currentBadges, badge.id];
+                await saveBadges(newBadges);
+                return badge;
+            }
+            return null;
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Shared chrome — matches Butterfly Garden's .roundbtn and the other
+         * games' buttons so all four look like one family.
+         * ------------------------------------------------------------------ */
+
+        const RoundIconButton = ({ onClick, title, children, className = '' }) => (
+            <button
+                onClick={onClick}
+                title={title}
+                aria-label={title}
+                className={`w-[62px] h-[62px] rounded-full bg-[#fffdf7] text-[28px] leading-none
+                    flex items-center justify-center transition-transform active:scale-90
+                    shadow-[0_10px_0_rgba(0,0,0,.08),0_18px_40px_rgba(80,50,120,.18)] ${className}`}
+            >
+                {children}
+            </button>
+        );
+
+        const MuteButton = ({ className = '' }) => {
+            const muted = useMuted();
+            return (
+                <RoundIconButton
+                    onClick={() => setGlobalMuted(!isMuted)}
+                    title={muted ? 'Unmute' : 'Mute'}
+                    className={className}
+                >
+                    {muted ? '🔇' : '🔊'}
+                </RoundIconButton>
+            );
+        };
+
+        const BackButton = ({ onClick, label = '← Back' }) => (
+            <button
+                onClick={onClick}
+                className="bg-white bg-opacity-30 hover:bg-opacity-50 text-white px-4 py-2 rounded-full font-bold shadow-lg transition-all"
+            >
+                {label}
+            </button>
+        );
+
+        const BadgePopup = ({ badge, onClose }) => {
+            useEffect(() => {
+                const timer = setTimeout(onClose, 4000);
+                return () => clearTimeout(timer);
+            }, [badge, onClose]);
+            return (
+                <div className="fixed inset-x-0 top-4 flex justify-center z-50 px-4">
+                    <div className="bg-white rounded-3xl shadow-2xl px-6 py-4 flex items-center gap-4 border-4 border-yellow-300">
+                        <div className="text-5xl">{badge.emoji}</div>
+                        <div>
+                            <div className="font-bold text-purple-700 text-lg">New badge: {badge.name}</div>
+                            <div className="text-purple-500 text-sm">{badge.description}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const shuffle = (list) => {
+            const copy = [...list];
+            for (let i = copy.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [copy[i], copy[j]] = [copy[j], copy[i]];
+            }
+            return copy;
+        };
+
+        const pickDistractors = (value, pool, count) => {
+            const others = pool.filter(v => v !== value);
+            const picked = [];
+            while (picked.length < count && others.length) {
+                const index = Math.floor(Math.random() * others.length);
+                picked.push(others.splice(index, 1)[0]);
+            }
+            return picked;
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Module 1 — Counting
+         * ------------------------------------------------------------------ */
+
+        const COUNT_MODE_KEY = 'uni_count_mode';
+        const loadCountMode = () => {
+            try { return localStorage.getItem(COUNT_MODE_KEY) === 'quiz' ? 'quiz' : 'learn'; }
+            catch (e) { return 'learn'; }
+        };
+
+        const CountingGame = ({ onBadge, onLevelDone, levelsDone, streaks, onStreakChange }) => {
+            const [level, setLevel] = useState(null);
+            const [mode, setMode] = useState(loadCountMode);
+
+            // Count Along state
+            const [shown, setShown] = useState(0);   // how many numbers are on screen
+
+            // Which One? state
+            const [target, setTarget] = useState(null);
+            const [choices, setChoices] = useState([]);
+            const [message, setMessage] = useState('');
+            const [unicorn, setUnicorn] = useState(UNICORNS[0]);
+            const [sparkles, setSparkles] = useState([]);
+
+            const askedRef = useRef(0);
+
+            const popSparkle = (element) => {
+                if (!element) return;
+                const rect = element.getBoundingClientRect();
+                const id = Math.random();
+                setSparkles(prev => [...prev, { id, x: rect.left + rect.width / 2, y: rect.top }]);
+                setTimeout(() => setSparkles(prev => prev.filter(s => s.id !== id)), 1000);
+            };
+
+            // Numbers she hasn't mastered come up more often than ones she has.
+            const drawNumber = useCallback((numbers) => {
+                const weighted = [];
+                numbers.forEach(n => {
+                    const streak = streaks[n] || 0;
+                    const weight = streak >= MASTERY_STREAK ? 1 : (MASTERY_STREAK + 1 - streak) * 2;
+                    for (let i = 0; i < weight; i++) weighted.push(n);
+                });
+                return weighted[Math.floor(Math.random() * weighted.length)] || numbers[0];
+            }, [streaks]);
+
+            const nextQuestion = useCallback((levelData, announce = true) => {
+                const next = drawNumber(levelData.numbers);
+                const speaker = UNICORNS[Math.floor(Math.random() * UNICORNS.length)];
+                setTarget(next);
+                setUnicorn(speaker);
+                setMessage('');
+                setChoices(shuffle([next, ...pickDistractors(next, levelData.numbers, 2)]));
+                if (announce) {
+                    stopSpeaking();
+                    setTimeout(() => speakEs(SPANISH_NUMBERS[next], { seed: speaker.name }), 120);
+                }
+            }, [drawNumber]);
+
+            const openLevel = (levelData) => {
+                setLevel(levelData);
+                setShown(0);
+                askedRef.current = 0;
+                stopSpeaking();
+                if (mode === 'quiz') {
+                    nextQuestion(levelData);
+                } else {
+                    speak(`Let's count! Tap a unicorn to count in Spanish.`, { rate: 0.95 });
+                }
+            };
+
+            const changeMode = (next) => {
+                setMode(next);
+                try { localStorage.setItem(COUNT_MODE_KEY, next); } catch (e) {}
+                stopSpeaking();
+                setShown(0);
+                setMessage('');
+                if (!level) return;
+                if (next === 'quiz') {
+                    nextQuestion(level);
+                } else {
+                    speak('Count along! Tap to add a unicorn.', { rate: 0.95 });
+                }
+            };
+
+            /* ---- Count Along ---- */
+            const addUnicorn = (event) => {
+                if (!level || shown >= level.numbers.length) return;
+                const next = shown + 1;
+                setShown(next);
+                const number = level.numbers[next - 1];
+                stopSpeaking();
+                speakEs(SPANISH_NUMBERS[number], { seed: UNICORNS[next % UNICORNS.length].name });
+                popSparkle(event?.currentTarget);
+                onBadge('spoke_1');
+                if (next === level.numbers.length) {
+                    // Reaching the end of the row is what finishes a level.
+                    setTimeout(() => {
+                        speak(`You counted to ${level.numbers[level.numbers.length - 1]} in Spanish!`, { rate: 0.95, pitch: 1.4 });
+                    }, 900);
+                    onLevelDone(level.id);
+                    onBadge(`level_${level.id}`);
+                }
+            };
+
+            const replayCount = () => {
+                if (!level) return;
+                stopSpeaking();
+                level.numbers.slice(0, Math.max(shown, 1)).forEach(n => speakEs(SPANISH_NUMBERS[n]));
+            };
+
+            /* ---- Which One? ---- */
+            const handlePick = (picked, event) => {
+                if (picked === target) {
+                    onStreakChange(target, (streaks[target] || 0) + 1);
+                    setMessage('correct');
+                    stopSpeaking();
+                    speakEs(SPANISH_NUMBERS[target], { seed: unicorn.name });
+                    speak(`Yes! ${target}. Great job!`, { rate: 0.95, pitch: 1.4 });
+                    popSparkle(event?.currentTarget);
+                    askedRef.current += 1;
+                    onBadge('spoke_1');
+                    // Ten right answers is a solid session — count that as the level
+                    // being done so the next one opens up.
+                    if (askedRef.current >= 10) {
+                        onLevelDone(level.id);
+                        onBadge(`level_${level.id}`);
+                    }
+                    setTimeout(() => nextQuestion(level), 2000);
+                } else {
+                    onStreakChange(target, 0);
+                    setMessage(`nope:${picked}`);
+                    stopSpeaking();
+                    speak(`That one is`, { rate: 0.95 });
+                    speakEs(SPANISH_NUMBERS[picked]);
+                    speak(`Listen again.`, { rate: 0.95 });
+                    speakEs(SPANISH_NUMBERS[target], { seed: unicorn.name });
+                }
+            };
+
+            /* ---- level picker ---- */
+            if (!level) {
+                return (
+                    <div className="bg-gradient-to-b from-fuchsia-400 via-violet-400 to-indigo-300 rounded-3xl p-6">
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-1">
+                            🔢 Count in Spanish
+                        </h2>
+                        <p className="text-white text-center mb-6 drop-shadow">
+                            Cuenta con los unicornios — count with the unicorns!
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-3 max-w-4xl mx-auto">
+                            {LEVELS.map(levelData => {
+                                const previousDone = levelData.id === 1 || levelsDone.includes(levelData.id - 1);
+                                const done = levelsDone.includes(levelData.id);
+                                return (
+                                    <button
+                                        key={levelData.id}
+                                        data-testid={`level-${levelData.id}`}
+                                        disabled={!previousDone}
+                                        onClick={() => openLevel(levelData)}
+                                        className={`rounded-3xl p-5 shadow-xl transition-transform text-center ${
+                                            previousDone
+                                                ? 'bg-white hover:scale-105 active:scale-95'
+                                                : 'bg-white bg-opacity-40 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        <div className="text-5xl mb-2">{previousDone ? levelData.emoji : '🔒'}</div>
+                                        <div className="font-bold text-purple-700 text-lg">{levelData.name}</div>
+                                        <div className="text-purple-500 text-sm italic">{levelData.spanishName}</div>
+                                        {done && <div className="text-3xl mt-2">⭐</div>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
+            const lastNumber = level.numbers[level.numbers.length - 1];
+
+            return (
+                <div className="bg-gradient-to-b from-fuchsia-400 via-violet-400 to-indigo-300 rounded-3xl p-6">
+                    <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                        <BackButton onClick={() => { setLevel(null); stopSpeaking(); }} label="← Levels" />
+                        <h2 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                            {level.emoji} {level.spanishName}
+                        </h2>
+                        <div className="w-[90px]" />
+                    </div>
+
+                    {/* Mode toggle */}
+                    <div className="flex justify-center gap-2 mb-5">
+                        <button
+                            data-testid="mode-learn"
+                            onClick={() => changeMode('learn')}
+                            className={`px-4 py-2 rounded-full font-bold shadow-lg transition-all ${
+                                mode === 'learn'
+                                    ? 'bg-white text-purple-700'
+                                    : 'bg-white bg-opacity-30 hover:bg-opacity-50 text-white'
+                            }`}
+                        >
+                            🦄 Count Along
+                        </button>
+                        <button
+                            data-testid="mode-quiz"
+                            onClick={() => changeMode('quiz')}
+                            className={`px-4 py-2 rounded-full font-bold shadow-lg transition-all ${
+                                mode === 'quiz'
+                                    ? 'bg-white text-purple-700'
+                                    : 'bg-white bg-opacity-30 hover:bg-opacity-50 text-white'
+                            }`}
+                        >
+                            🌟 Which One?
+                        </button>
+                    </div>
+
+                    {mode === 'learn' ? (
+                        <React.Fragment>
+                            <p className="text-center text-white drop-shadow mb-4">
+                                Tap to add a unicorn and hear its number in Spanish.
+                            </p>
+                            <div className="bg-white rounded-3xl p-5 shadow-2xl min-h-[220px]">
+                                <div className="flex flex-wrap justify-center gap-3">
+                                    {level.numbers.slice(0, shown).map((number, index) => (
+                                        <div
+                                            key={number}
+                                            data-testid={`counted-${number}`}
+                                            className="pop-in shrink-0 flex flex-col items-center bg-purple-50 rounded-2xl px-3 py-2 cursor-pointer"
+                                            onClick={() => { stopSpeaking(); speakEs(SPANISH_NUMBERS[number]); }}
+                                        >
+                                            <span
+                                                className="text-4xl"
+                                                style={{ filter: `hue-rotate(${(index * 47) % 360}deg)` }}
+                                            >🦄</span>
+                                            <span className="text-2xl font-bold text-purple-700">{number}</span>
+                                            <span className="text-purple-500 font-semibold">{SPANISH_NUMBERS[number]}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                {shown === 0 && (
+                                    <p className="text-center text-purple-400 text-lg mt-12">
+                                        Tap the big button to start counting!
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="flex justify-center gap-3 mt-6 flex-wrap">
+                                <button
+                                    data-testid="add-unicorn"
+                                    onClick={addUnicorn}
+                                    disabled={shown >= level.numbers.length}
+                                    className={`font-bold px-8 py-4 rounded-full shadow-lg text-xl transition-transform ${
+                                        shown >= level.numbers.length
+                                            ? 'bg-white bg-opacity-50 text-purple-400'
+                                            : 'bg-white text-purple-700 hover:scale-105 active:scale-95'
+                                    }`}
+                                >
+                                    {shown >= level.numbers.length ? `¡${SPANISH_NUMBERS[lastNumber]}! 🎉` : '🦄 Add one more'}
+                                </button>
+                                <button
+                                    data-testid="replay-count"
+                                    onClick={replayCount}
+                                    className="bg-white text-purple-700 font-bold px-6 py-4 rounded-full shadow-lg hover:scale-105 transition-transform"
+                                >
+                                    🔊 Count them again
+                                </button>
+                                {shown > 0 && (
+                                    <button
+                                        data-testid="restart-count"
+                                        onClick={() => { setShown(0); stopSpeaking(); }}
+                                        className="bg-white text-purple-700 font-bold px-6 py-4 rounded-full shadow-lg hover:scale-105 transition-transform"
+                                    >
+                                        🔁 Start over
+                                    </button>
+                                )}
+                            </div>
+                        </React.Fragment>
+                    ) : (
+                        <React.Fragment>
+                            <div className="flex flex-col items-center gap-4 mb-6">
+                                <div className="bob"><UnicornFace unicorn={unicorn} size={110} /></div>
+                                <button
+                                    data-testid="say-again"
+                                    onClick={() => { stopSpeaking(); speakEs(SPANISH_NUMBERS[target], { seed: unicorn.name }); }}
+                                    className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                                >
+                                    🔊 Say it again
+                                </button>
+                            </div>
+
+                            <div className="grid gap-4 sm:grid-cols-3 max-w-3xl mx-auto">
+                                {choices.map(choice => (
+                                    <button
+                                        key={choice}
+                                        data-testid={`choice-${choice}`}
+                                        onClick={(event) => handlePick(choice, event)}
+                                        className={`rounded-3xl py-10 text-5xl font-bold shadow-xl transition-transform hover:scale-105 active:scale-95 ${
+                                            message === 'correct' && choice === target
+                                                ? 'bg-green-300 text-green-900'
+                                                : message === `nope:${choice}`
+                                                    ? 'bg-orange-200 text-orange-900'
+                                                    : 'bg-white text-purple-700'
+                                        }`}
+                                    >
+                                        {choice}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div data-testid="feedback" className="text-center text-white font-bold text-xl drop-shadow mt-6 min-h-[32px]">
+                                {message === 'correct' && `🎉 ¡Sí! ${target} is "${SPANISH_NUMBERS[target]}"`}
+                                {message.startsWith('nope:') &&
+                                    `That one is "${SPANISH_NUMBERS[Number(message.slice(5))]}" — listen again!`}
+                            </div>
+                        </React.Fragment>
+                    )}
+
+                    {sparkles.map(s => (
+                        <div
+                            key={s.id}
+                            className="sparkle fixed text-4xl pointer-events-none z-40"
+                            style={{ left: s.x, top: s.y }}
+                        >✨</div>
+                    ))}
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Module 2 — Memory
+         * ------------------------------------------------------------------ */
+
+        // Builds a deck of `pairCount` pairs. Each pair is two cards: the English
+        // side and the Spanish side of the same thing, so matching them is the
+        // translation. Picture pairs share an icon; number pairs put the numeral on
+        // one card and that many unicorns on the other, which gives the numeral
+        // something to be matched against and makes it counting practice.
+        // Only numbers a child can actually count on a card get a quantity side —
+        // twenty unicorns on a phone-sized card is not something you can count, and
+        // "ten unicorns +90" teaches nothing. The bigger numbers live in the
+        // counting module, where the ladder teaches them properly.
+        const COUNTABLE_MAX = 10;
+
+        const buildDeck = (pairCount, availableNumbers) => {
+            const countable = availableNumbers.filter(n => n <= COUNTABLE_MAX);
+            const wantNumbers = Math.min(Math.floor(pairCount / 2), countable.length);
+            const numberPairs = shuffle(countable).slice(0, wantNumbers).map(n => ({
+                key: `n${n}`,
+                kind: 'number',
+                number: n,
+                english: String(n),
+                spanish: SPANISH_NUMBERS[n]
+            }));
+            const picturePairs = shuffle(WORD_PAIRS).slice(0, pairCount - numberPairs.length).map(pair => ({
+                key: pair.id,
+                kind: 'picture',
+                icon: pair.icon,
+                english: pair.english,
+                spanish: pair.spanish
+            }));
+
+            const cards = [];
+            [...numberPairs, ...picturePairs].forEach(pair => {
+                cards.push({ ...pair, id: `${pair.key}-en`, side: 'en' });
+                cards.push({ ...pair, id: `${pair.key}-es`, side: 'es' });
+            });
+            return shuffle(cards);
+        };
+
+        // What a face-up card shows. A number card's English side is the numeral;
+        // its Spanish side is that many unicorns, so she can count to check.
+        const CardFace = ({ card }) => {
+            if (card.kind === 'number') {
+                if (card.side === 'en') {
+                    return (
+                        <React.Fragment>
+                            <span className="text-4xl sm:text-5xl font-bold text-purple-700">{card.number}</span>
+                            <span className="text-purple-400 text-[10px] mt-1">how many?</span>
+                        </React.Fragment>
+                    );
+                }
+                return (
+                    <React.Fragment>
+                        <span className="text-[11px] sm:text-sm leading-tight px-1 break-all">
+                            {'🦄'.repeat(card.number)}
+                        </span>
+                        <span className="text-sm sm:text-lg font-bold text-purple-700 mt-1">{card.spanish}</span>
+                    </React.Fragment>
+                );
+            }
+            return (
+                <React.Fragment>
+                    <span className="text-3xl sm:text-4xl">{card.icon}</span>
+                    <span className={`font-bold mt-1 px-1 text-xs sm:text-base leading-tight break-words
+                        ${card.side === 'en' ? 'text-purple-700' : 'text-fuchsia-600'}`}>
+                        {card.side === 'en' ? card.english : card.spanish}
+                    </span>
+                    <span className="text-[9px] sm:text-[10px] uppercase tracking-wide text-purple-400">
+                        {card.side === 'en' ? 'English' : 'Español'}
+                    </span>
+                </React.Fragment>
+            );
+        };
+
+        const MemoryGame = ({ onBadge, availableNumbers, bestMoves, onGameWon }) => {
+            const [deckSize, setDeckSize] = useState(null);
+            const [cards, setCards] = useState([]);
+            const [faceUp, setFaceUp] = useState([]);      // indices currently shown
+            const [matched, setMatched] = useState([]);    // indices already solved
+            const [moves, setMoves] = useState(0);
+            const [mistakes, setMistakes] = useState(0);
+            const [won, setWon] = useState(false);
+            const busyRef = useRef(false);
+
+            const startGame = (size) => {
+                setDeckSize(size);
+                setCards(buildDeck(size.pairs, availableNumbers));
+                setFaceUp([]);
+                setMatched([]);
+                setMoves(0);
+                setMistakes(0);
+                setWon(false);
+                busyRef.current = false;
+                stopSpeaking();
+                speak('Find the matching pairs! One card is English, one is Spanish.', { rate: 0.95 });
+            };
+
+            const sayCard = (card) => {
+                if (card.side === 'en') speak(card.english, { rate: 0.85 });
+                else speakEs(card.spanish);
+            };
+
+            const handleCardClick = (index) => {
+                if (busyRef.current) return;
+                if (faceUp.includes(index) || matched.includes(index)) return;
+
+                const nextFaceUp = [...faceUp, index];
+                setFaceUp(nextFaceUp);
+                stopSpeaking();
+                sayCard(cards[index]);
+
+                if (nextFaceUp.length < 2) return;
+
+                const [first, second] = nextFaceUp;
+                const isPair = cards[first].key === cards[second].key &&
+                               cards[first].side !== cards[second].side;
+                busyRef.current = true;
+                setMoves(m => m + 1);
+
+                if (isPair) {
+                    setTimeout(() => {
+                        setMatched(prev => {
+                            const nextMatched = [...prev, first, second];
+                            if (nextMatched.length === cards.length) {
+                                setWon(true);
+                            }
+                            return nextMatched;
+                        });
+                        setFaceUp([]);
+                        busyRef.current = false;
+                        // Replay the pair together — English then Spanish — so the
+                        // link between the two words is what she hears on a win.
+                        stopSpeaking();
+                        const pair = cards[first];
+                        speakPair(
+                            pair.kind === 'number' ? String(pair.number) : pair.english,
+                            pair.spanish
+                        );
+                    }, 700);
+                } else {
+                    setMistakes(m => m + 1);
+                    setTimeout(() => {
+                        setFaceUp([]);
+                        busyRef.current = false;
+                    }, 1200);
+                }
+            };
+
+            // Announce the win once, when it happens — not inside the click handler,
+            // where the matched-count check would race the state update.
+            useEffect(() => {
+                if (!won || !deckSize) return;
+                stopSpeaking();
+                speak('You found them all! ¡Muy bien!', { rate: 0.95, pitch: 1.4 });
+                onBadge('memory_1');
+                if (mistakes === 0) onBadge('memory_perfect');
+                onGameWon({ moves, mistakes, pairs: deckSize.pairs });
+            }, [won]);
+
+            /* ---- deck size picker ---- */
+            if (!deckSize) {
+                return (
+                    <div className="bg-gradient-to-b from-teal-400 via-sky-400 to-indigo-300 rounded-3xl p-6">
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-1">
+                            🧠 Memory Match
+                        </h2>
+                        <p className="text-white text-center mb-6 drop-shadow">
+                            Every pair is one English card and one Spanish card. How big a board?
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-3 max-w-3xl mx-auto">
+                            {DECK_SIZES.map(size => (
+                                <button
+                                    key={size.id}
+                                    data-testid={`deck-${size.id}`}
+                                    onClick={() => startGame(size)}
+                                    className="bg-white rounded-3xl p-6 shadow-xl hover:scale-105 active:scale-95 transition-transform text-center"
+                                >
+                                    <div className="text-5xl mb-2">{size.emoji}</div>
+                                    <div className="font-bold text-purple-700 text-xl">{size.label}</div>
+                                    <div className="text-purple-500 text-sm mt-1">{size.pairs} pairs</div>
+                                </button>
+                            ))}
+                        </div>
+                        {bestMoves > 0 && (
+                            <p className="text-center text-white drop-shadow mt-6">
+                                Best so far: {bestMoves} moves
+                            </p>
+                        )}
+                    </div>
+                );
+            }
+
+            /* ---- won ---- */
+            if (won) {
+                return (
+                    <div data-testid="memory-won" className="bg-gradient-to-b from-teal-400 via-sky-400 to-indigo-300 rounded-3xl p-8 text-center">
+                        <div className="text-6xl mb-3">🎉</div>
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg mb-2">
+                            ¡Muy bien! You found them all!
+                        </h2>
+                        <p className="text-white drop-shadow mb-6">
+                            {deckSize.pairs} pairs in {moves} moves
+                            {mistakes === 0 ? ' — with no mistakes! 💎' : ''}
+                        </p>
+                        <div className="flex justify-center gap-6 flex-wrap mb-8">
+                            {UNICORNS.map(unicorn => <UnicornCard key={unicorn.id} unicorn={unicorn} />)}
+                        </div>
+                        <div className="flex justify-center gap-3 flex-wrap">
+                            <button
+                                onClick={() => startGame(deckSize)}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                🔁 Play again
+                            </button>
+                            <button
+                                data-testid="back-to-decks"
+                                onClick={() => { setDeckSize(null); stopSpeaking(); }}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                🧠 Pick a new board
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            /* ---- playing ---- */
+            return (
+                <div className="bg-gradient-to-b from-teal-400 via-sky-400 to-indigo-300 rounded-3xl p-6">
+                    <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+                        <BackButton onClick={() => { setDeckSize(null); stopSpeaking(); }} label="← Boards" />
+                        <h2 className="text-2xl font-bold text-white drop-shadow-lg">
+                            {deckSize.emoji} {deckSize.pairs} pairs
+                        </h2>
+                        <div className="text-white font-bold drop-shadow" data-testid="moves">
+                            {moves} moves
+                        </div>
+                    </div>
+
+                    {/* Three columns on a phone, four once there's room — sixteen
+                        cards four-across on a 390px screen leaves them too narrow
+                        to read the words on. */}
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 max-w-3xl mx-auto">
+                        {cards.map((card, index) => {
+                            const isUp = faceUp.includes(index) || matched.includes(index);
+                            const isMatched = matched.includes(index);
+                            return (
+                                <div
+                                    key={card.id}
+                                    data-testid={`card-${index}`}
+                                    data-pair={card.key}
+                                    data-side={card.side}
+                                    data-up={isUp ? 'true' : 'false'}
+                                    className={`card3d cursor-pointer ${isMatched ? 'matched' : ''}`}
+                                    // Square, not tall: sixteen 3:4 cards three-across
+                                    // ran six rows deep on a phone, and a memory board
+                                    // you have to scroll is a memory board you can't play.
+                                    style={{ aspectRatio: '1 / 1' }}
+                                    onClick={() => handleCardClick(index)}
+                                >
+                                    <div className={`card3d-inner ${isUp ? 'face-up' : ''}`}>
+                                        <div className="card3d-face bg-gradient-to-br from-fuchsia-500 to-indigo-500 shadow-lg">
+                                            <span className="text-4xl">🦄</span>
+                                        </div>
+                                        <div className={`card3d-face card3d-back shadow-lg p-1 ${isMatched ? 'bg-green-100' : 'bg-white'}`}>
+                                            <CardFace card={card} />
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Number ladder
+         * ------------------------------------------------------------------ */
+
+        const NumberLadder = ({ streaks, levelsDone }) => {
+            const unlocked = new Set(
+                LEVELS.filter(l => l.id === 1 || levelsDone.includes(l.id - 1))
+                      .flatMap(l => l.numbers)
+            );
+            const mastered = ALL_NUMBERS.filter(n => (streaks[n] || 0) >= MASTERY_STREAK).length;
+            return (
+                <div className="bg-gradient-to-b from-amber-300 via-orange-300 to-pink-300 rounded-3xl p-6">
+                    <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-1">⭐ Number Ladder</h2>
+                    <p className="text-center text-white drop-shadow mb-6" data-testid="mastered-count">
+                        {mastered} of {ALL_NUMBERS.length} numbers mastered
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                        {ALL_NUMBERS.map(n => {
+                            const isMastered = (streaks[n] || 0) >= MASTERY_STREAK;
+                            return (
+                                <button
+                                    key={n}
+                                    data-testid={`ladder-${n}`}
+                                    onClick={() => { stopSpeaking(); speakEs(SPANISH_NUMBERS[n]); }}
+                                    className={`px-4 py-3 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105 flex flex-col items-center min-w-[86px] ${
+                                        isMastered
+                                            ? 'bg-yellow-200 text-yellow-900'
+                                            : unlocked.has(n)
+                                                ? 'bg-white text-purple-700'
+                                                : 'bg-white bg-opacity-40 text-purple-400'
+                                    }`}
+                                >
+                                    <span className="text-2xl">{isMastered ? '⭐' : ''}{n}</span>
+                                    <span className="text-sm">{SPANISH_NUMBERS[n]}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Badges view
+         * ------------------------------------------------------------------ */
+
+        const BadgesView = ({ unlockedBadges }) => (
+            <div className="bg-gradient-to-b from-indigo-400 via-purple-400 to-pink-300 rounded-3xl p-6">
+                <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-6">🏅 Badges</h2>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 max-w-4xl mx-auto">
+                    {BADGES.map(badge => {
+                        const earned = unlockedBadges.includes(badge.id);
+                        return (
+                            <div
+                                key={badge.id}
+                                className={`rounded-3xl p-5 text-center shadow-xl ${earned ? 'bg-white' : 'bg-white bg-opacity-40'}`}
+                            >
+                                <div className={`text-5xl mb-2 ${earned ? '' : 'grayscale opacity-60'}`}>
+                                    {earned ? badge.emoji : '🔒'}
+                                </div>
+                                <div className="font-bold text-purple-700">{badge.name}</div>
+                                <div className="text-purple-500 text-sm">{badge.description}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+
+        /* ------------------------------------------------------------------ *
+         * Landing page
+         * ------------------------------------------------------------------ */
+
+        const LandingPage = ({ onSelectModule, mastered, spanishVoiceMissing }) => {
+            const modules = [
+                { id: 'count',  name: 'Count in Spanish', emoji: '🔢', color: 'from-fuchsia-400 to-violet-500', description: 'Uno, dos, tres… all the way to cien. Count along or test yourself.' },
+                { id: 'memory', name: 'Memory Match',     emoji: '🧠', color: 'from-teal-400 to-sky-500',       description: 'Match the English card to its Spanish partner.' },
+                { id: 'ladder', name: 'Number Ladder',    emoji: '⭐', color: 'from-amber-400 to-pink-400',     description: `${mastered} of ${ALL_NUMBERS.length} numbers mastered.` },
+                { id: 'badges', name: 'Badges',           emoji: '🏅', color: 'from-indigo-400 to-purple-500',  description: `Collect ${BADGES.length} unicorn badges!` }
+            ];
+
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-fuchsia-400 via-purple-400 to-sky-300 p-6 sm:p-8">
+                    <div className="flex justify-end max-w-5xl mx-auto mb-2">
+                        <MuteButton />
+                    </div>
+
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl sm:text-5xl font-bold text-white drop-shadow-lg mb-2">
+                            🦄 Unicorn Spanish
+                        </h1>
+                        <p className="text-white text-lg drop-shadow">
+                            ¡Hola! Learn to count and match words with three magical unicorns.
+                        </p>
+                    </div>
+
+                    <div className="flex justify-center gap-6 flex-wrap mb-10">
+                        {UNICORNS.map(unicorn => <UnicornCard key={unicorn.id} unicorn={unicorn} size={110} />)}
+                    </div>
+
+                    <div className="grid gap-5 sm:grid-cols-2 max-w-4xl mx-auto">
+                        {modules.map(module => (
+                            <button
+                                key={module.id}
+                                data-testid={`module-${module.id}`}
+                                onClick={() => onSelectModule(module.id)}
+                                className={`bg-gradient-to-br ${module.color} rounded-3xl p-6 text-left shadow-xl
+                                    hover:scale-105 active:scale-95 transition-transform`}
+                            >
+                                <div className="text-5xl mb-2">{module.emoji}</div>
+                                <div className="text-2xl font-bold text-white drop-shadow">{module.name}</div>
+                                <div className="text-white text-sm mt-1 drop-shadow">{module.description}</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Honest about a device limitation rather than letting the Spanish
+                        quietly come out sounding like English. */}
+                    {spanishVoiceMissing && (
+                        <div
+                            data-testid="no-spanish-voice"
+                            className="max-w-4xl mx-auto mt-8 bg-white bg-opacity-90 rounded-2xl px-5 py-4 text-sm text-purple-700 shadow-lg"
+                        >
+                            <strong>For grown-ups:</strong> this device has no Spanish voice installed, so the
+                            Spanish words will be read with an English accent. The game still works. To fix it,
+                            add a Spanish voice in your system settings — on iPad,
+                            Settings → Accessibility → Spoken Content → Voices → Español; on Windows,
+                            Settings → Time &amp; Language → Speech.
+                        </div>
+                    )}
+
+                    <div className="text-center mt-10">
+                        <a href="../" className="text-white underline drop-shadow">← All games</a>
+                    </div>
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * App
+         * ------------------------------------------------------------------ */
+
+        const App = () => {
+            const [module, setModule] = useState('landing');
+            const [levelsDone, setLevelsDone] = useState([]);
+            const [streaks, setStreaks] = useState({});
+            const [memoryStats, setMemoryStats] = useState({ gamesWon: 0, bestMoves: 0 });
+            const [unlockedBadges, setUnlockedBadges] = useState([]);
+            const [newBadge, setNewBadge] = useState(null);
+            const [loaded, setLoaded] = useState(false);
+            const [spanishVoiceMissing, setSpanishVoiceMissing] = useState(false);
+
+            // Saving needs the current value, and saving is a side effect, so it
+            // must not happen inside a state updater (React may re-run those).
+            // Keep refs in sync with state and read the refs when saving.
+            const badgesRef = useRef([]);
+            const levelsDoneRef = useRef([]);
+            const streaksRef = useRef({});
+            const memoryStatsRef = useRef({ gamesWon: 0, bestMoves: 0 });
+
+            useEffect(() => {
+                (async () => {
+                    const counting = await loadProgress('counting');
+                    const memory = await loadProgress('memory');
+                    const badges = await loadBadges();
+                    levelsDoneRef.current = counting?.levelsDone || [];
+                    streaksRef.current = counting?.streaks || {};
+                    memoryStatsRef.current = {
+                        gamesWon: memory?.gamesWon || 0,
+                        bestMoves: memory?.bestMoves || 0
+                    };
+                    badgesRef.current = badges;
+                    setLevelsDone(levelsDoneRef.current);
+                    setStreaks(streaksRef.current);
+                    setMemoryStats(memoryStatsRef.current);
+                    setUnlockedBadges(badges);
+                    setLoaded(true);
+                })();
+            }, []);
+
+            useEffect(() => {
+                if (!('speechSynthesis' in window)) return;
+                // Voices load asynchronously in Chrome, so the list is often empty on
+                // the first read. Check now and again when the list arrives.
+                const check = () => setSpanishVoiceMissing(
+                    (speechSynthesis.getVoices() || []).length > 0 && !hasSpanishVoice()
+                );
+                check();
+                speechSynthesis.onvoiceschanged = check;
+                return () => { speechSynthesis.onvoiceschanged = null; };
+            }, []);
+
+            const handleBadge = useCallback(async (condition) => {
+                const badge = await checkAndUnlockBadge(condition, badgesRef.current);
+                if (badge) {
+                    badgesRef.current = [...badgesRef.current, badge.id];
+                    setUnlockedBadges(badgesRef.current);
+                    setNewBadge(badge);
+                }
+            }, []);
+
+            const handleLevelDone = useCallback((levelId) => {
+                if (levelsDoneRef.current.includes(levelId)) return;
+                const next = [...levelsDoneRef.current, levelId].sort((a, b) => a - b);
+                levelsDoneRef.current = next;
+                setLevelsDone(next);
+                saveProgress('counting', { levelsDone: next });
+            }, []);
+
+            const handleStreakChange = useCallback((number, value) => {
+                const next = { ...streaksRef.current, [number]: value };
+                streaksRef.current = next;
+                setStreaks(next);
+                saveProgress('counting', { streaks: next });
+            }, []);
+
+            const handleMemoryWon = useCallback(({ moves }) => {
+                const previous = memoryStatsRef.current;
+                const next = {
+                    gamesWon: previous.gamesWon + 1,
+                    bestMoves: previous.bestMoves === 0 ? moves : Math.min(previous.bestMoves, moves)
+                };
+                memoryStatsRef.current = next;
+                setMemoryStats(next);
+                saveProgress('memory', next);
+            }, []);
+
+            useEffect(() => {
+                if (!loaded) return;
+                const mastered = ALL_NUMBERS.filter(n => (streaks[n] || 0) >= MASTERY_STREAK).length;
+                if (mastered >= 10) handleBadge('mastered_10');
+                if (mastered >= ALL_NUMBERS.length) handleBadge('mastered_all');
+            }, [streaks, loaded, handleBadge]);
+
+            const masteredCount = ALL_NUMBERS.filter(n => (streaks[n] || 0) >= MASTERY_STREAK).length;
+
+            // The memory deck only uses numbers from levels she has reached, so it
+            // never quizzes her on words the counting module hasn't introduced.
+            const availableNumbers = LEVELS
+                .filter(l => l.id === 1 || levelsDone.includes(l.id - 1))
+                .flatMap(l => l.numbers)
+                .filter((n, i, all) => all.indexOf(n) === i);
+
+            if (!loaded) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-b from-fuchsia-400 via-purple-400 to-sky-300 flex items-center justify-center">
+                        <div className="text-6xl bob">🦄</div>
+                    </div>
+                );
+            }
+
+            if (module === 'landing') {
+                return (
+                    <React.Fragment>
+                        <LandingPage
+                            onSelectModule={setModule}
+                            mastered={masteredCount}
+                            spanishVoiceMissing={spanishVoiceMissing}
+                        />
+                        {newBadge && <BadgePopup badge={newBadge} onClose={() => setNewBadge(null)} />}
+                    </React.Fragment>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-fuchsia-400 via-purple-400 to-sky-300 p-4 sm:p-6">
+                    <div className="flex justify-between items-center max-w-5xl mx-auto mb-4">
+                        <RoundIconButton
+                            onClick={() => { setModule('landing'); stopSpeaking(); }}
+                            title="Home"
+                        >🏠</RoundIconButton>
+                        <MuteButton />
+                    </div>
+
+                    <div className="max-w-5xl mx-auto">
+                        {module === 'count' && (
+                            <CountingGame
+                                onBadge={handleBadge}
+                                onLevelDone={handleLevelDone}
+                                levelsDone={levelsDone}
+                                streaks={streaks}
+                                onStreakChange={handleStreakChange}
+                            />
+                        )}
+                        {module === 'memory' && (
+                            <MemoryGame
+                                onBadge={handleBadge}
+                                availableNumbers={availableNumbers}
+                                bestMoves={memoryStats.bestMoves}
+                                onGameWon={handleMemoryWon}
+                            />
+                        )}
+                        {module === 'ladder' && <NumberLadder streaks={streaks} levelsDone={levelsDone} />}
+                        {module === 'badges' && <BadgesView unlockedBadges={unlockedBadges} />}
+                    </div>
+
+                    {newBadge && <BadgePopup badge={newBadge} onClose={() => setNewBadge(null)} />}
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
