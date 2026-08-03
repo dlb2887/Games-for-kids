@@ -13,6 +13,7 @@ fully offline; a couple pull their frameworks from a CDN, so those need internet
 | 🦋 **Butterfly Garden** | [`butterfly-garden/`](butterfly-garden/) | A talking learning game for ages ~4: counting, building-up addition, spelling short words, plus a dress-up sandbox with real butterfly photos and draggable accessories. |
 | 👑 **Princess Learning Adventure** | [`princess-learning-adventure/`](princess-learning-adventure/) | A Disney-princess-themed learning game: letter tracing, spelling, a memory game, and dress-up with favorite princess friends. |
 | 🐱 **Magical Kittens Reading** | [`kitten-reading/`](kitten-reading/) | A learn-to-read game for ages ~4: drag a finger across the words of a superhero-kitten story to sound them out, plus sight-word flash cards from the same story. |
+| 🦄 **Unicorn Spanish** | [`unicorn-spanish/`](unicorn-spanish/) | A first-Spanish game for ages ~4: count from uno to cien with three unicorns, and a memory game where every pair is an English card and its Spanish partner. |
 
 More games will be added as their own folders.
 
@@ -29,10 +30,13 @@ Games-for-kids/
 ├── princess-learning-adventure/
 │   ├── index.html
 │   └── README.md
-└── kitten-reading/
+├── kitten-reading/
+│   ├── index.html
+│   ├── README.md
+│   └── assets/photos/            # optional kitten photos; emoji stand in if absent
+└── unicorn-spanish/
     ├── index.html
-    ├── README.md
-    └── assets/photos/            # optional kitten photos; emoji stand in if absent
+    └── README.md
 ```
 
 Each game folder has its own `index.html` (the game) and `README.md` (how it works, credits).
