@@ -27,18 +27,9 @@
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
-        /* Chunk / word highlighting is driven by toggling these classes on element
-           refs directly (never through React state) so a moving finger doesn't
+        /* Word highlighting is driven by toggling these classes on element refs
+           directly (never through React state) so a moving finger doesn't
            re-render the sentence on every pointermove. */
-        .chunk {
-            display: inline-block;
-            transition: transform .12s ease, color .12s ease, text-shadow .12s ease;
-        }
-        .chunk.lit {
-            transform: scale(1.35) translateY(-6px);
-            color: #db2777;
-            text-shadow: 0 0 16px rgba(236, 72, 153, .55);
-        }
         .word {
             display: inline-block;
             border-radius: 14px;
@@ -308,66 +299,17 @@
         };
 
         /* ------------------------------------------------------------------ *
-         * Letter sounds and word chunking
+         * Sentences
          * ------------------------------------------------------------------ */
-
-        // Single letters. Continuants are written stretched ("mmm") because that
-        // is how they get sounded out; stops get the usual "buh"/"tuh" shape.
-        const LETTER_SOUNDS = {
-            a: 'ah',  b: 'buh', c: 'kuh', d: 'duh', e: 'eh',  f: 'ffff',
-            g: 'guh', h: 'huh', i: 'ih',  j: 'juh', k: 'kuh', l: 'lll',
-            m: 'mmm', n: 'nnn', o: 'oh',  p: 'puh', q: 'kw',  r: 'rrr',
-            s: 'sss', t: 'tuh', u: 'uh',  v: 'vvv', w: 'wuh', x: 'ks',
-            y: 'yuh', z: 'zzz'
-        };
-
-        // Letter teams that make one sound. Checked longest-first so "igh" wins
-        // over "gh", and so `ship` chunks as sh·i·p rather than s·h·i·p.
-        const DIGRAPH_SOUNDS = {
-            igh: 'eye', tch: 'chuh',
-            sh: 'shhh', ch: 'chuh', th: 'thh', ck: 'kuh', ng: 'ng',
-            ee: 'eee', oo: 'ooo', ea: 'eee', ai: 'ay', ay: 'ay',
-            oa: 'oh', ow: 'ow', ou: 'ow', oi: 'oy', oy: 'oy',
-            ar: 'arr', or: 'or', er: 'er', ir: 'er', ur: 'er',
-            qu: 'kw', wh: 'wuh'
-        };
-
-        const DIGRAPHS_BY_LENGTH = Object.keys(DIGRAPH_SOUNDS).sort((a, b) => b.length - a.length);
-
-        // Splits a word into the letter-sound chunks a child drags across.
-        // Returns [{ text, sound }] using the word's original capitalization for
-        // display, and lowercase for the sound lookup.
-        const chunkWord = (word) => {
-            const lower = word.toLowerCase();
-            const chunks = [];
-            let i = 0;
-            while (i < lower.length) {
-                const digraph = DIGRAPHS_BY_LENGTH.find(d =>
-                    lower.startsWith(d, i) &&
-                    // A letter team needs the whole team inside the word, and a
-                    // trailing "e" team like `ar` in "are" still counts.
-                    i + d.length <= lower.length
-                );
-                if (digraph) {
-                    chunks.push({ text: word.slice(i, i + digraph.length), sound: DIGRAPH_SOUNDS[digraph] });
-                    i += digraph.length;
-                    continue;
-                }
-                const letter = lower[i];
-                chunks.push({ text: word[i], sound: LETTER_SOUNDS[letter] || letter });
-                i += 1;
-            }
-            return chunks;
-        };
-
         // Sentences are stored as plain text. Split into tokens that keep their
         // punctuation for display but expose a clean, letters-only form for
-        // chunking and speaking.
+        // speaking, so "kittens." is shown with its full stop but spoken as
+        // "kittens".
         const tokenizeSentence = (sentence) => sentence.split(/\s+/).filter(Boolean).map(token => {
             const clean = token.replace(/[^a-zA-Z]/g, '');
             const lead = token.slice(0, token.indexOf(clean[0] || token[0]));
             const trail = token.slice((lead + clean).length);
-            return { raw: token, clean, lead, trail, chunks: clean ? chunkWord(clean) : [] };
+            return { raw: token, clean, lead, trail };
         });
 
         /* ------------------------------------------------------------------ *
@@ -378,26 +320,209 @@
         // and they appear automatically; while they're missing the emoji stands in,
         // so the game never shows a broken image.
         const KITTENS = [
-            { id: 'pip',   name: 'Pip',   power: 'Zap',           powerEmoji: '⚡', cape: 'red',    color: '#ef4444', photo: 'assets/photos/kitten1.jpg', emoji: '🐱', gender: 'female' },
+            // Pip picks up ice in story 3 — the story is the reason he has two
+            // powers, rather than the ice turning up out of nowhere.
+            { id: 'pip',   name: 'Pip',   power: 'Zap and Ice',   powerEmoji: '⚡', cape: 'red',    color: '#ef4444', photo: 'assets/photos/kitten1.jpg', emoji: '🐱', gender: 'female' },
             { id: 'luna',  name: 'Luna',  power: 'Starlight Fly', powerEmoji: '✨', cape: 'blue',   color: '#3b82f6', photo: 'assets/photos/kitten2.jpg', emoji: '🐈', gender: 'female' },
             { id: 'boots', name: 'Boots', power: 'Super Strong',  powerEmoji: '💪', cape: 'yellow', color: '#eab308', photo: 'assets/photos/kitten3.jpg', emoji: '🐈‍⬛', gender: 'male' }
         ];
 
         const VILLAINS = {
             wolf: { name: 'Big Bad Wolf', emoji: '🐺', gender: 'male' },
-            fox:  { name: 'Sly Fox',      emoji: '🦊', gender: 'male' }
+            fox:  { name: 'Sly Fox',      emoji: '🦊', gender: 'male' },
+            dog:  { name: 'Big Bad Dog',  emoji: '🐕', gender: 'male' }
         };
 
         /* ------------------------------------------------------------------ *
-         * The story
+         * Illustrations
+         *
+         * Drawn inline as SVG rather than shipped as image files, so the game
+         * stays one self-contained page with nothing to download and nothing to
+         * license. Each one is picked by a story or chapter's `art` key.
          * ------------------------------------------------------------------ */
 
-        // Written so that all 40 Dolch pre-primer sight words appear across the
-        // five chapters. `words` is the list each chapter introduces — reading a
-        // chapter is what unlocks those words in the flash card decks.
-        const STORY = [
+        // The whole Big Bad Wolf, head to feet — the point of this one is that
+        // you can see his hands and his feet, which the emoji 🐺 never shows.
+        // He's a wolf, so he wears nothing; that's just what a wolf looks like.
+        const WolfFullBody = () => (
+            <svg viewBox="0 0 200 260" className="w-full h-full" role="img" aria-label="The Big Bad Wolf, head to feet">
+                <defs>
+                    <linearGradient id="wolfFur" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#8d9aa8" />
+                        <stop offset="100%" stopColor="#5f6b78" />
+                    </linearGradient>
+                </defs>
+                {/* Bushy tail, sweeping down and out past his hip — kept low so it
+                    doesn't collide with the paw-hand on that side. */}
+                <path d="M128 176 Q172 186 188 214 Q178 224 166 214 Q148 194 124 194 Z" fill="#5f6b78" />
+                <path d="M140 186 Q168 196 180 212 Q164 200 138 194 Z" fill="#78838f" />
+                {/* legs and big paw feet */}
+                <rect x="72" y="188" width="20" height="42" rx="9" fill="url(#wolfFur)" />
+                <rect x="108" y="188" width="20" height="42" rx="9" fill="url(#wolfFur)" />
+                <ellipse cx="78" cy="234" rx="20" ry="12" fill="#c8d0d8" />
+                <ellipse cx="122" cy="234" rx="20" ry="12" fill="#c8d0d8" />
+                {/* toes on each foot */}
+                {[64, 72, 80, 88].map(x => <circle key={`lt${x}`} cx={x} cy={228} r="3.4" fill="#9aa5b1" />)}
+                {[108, 116, 124, 132].map(x => <circle key={`rt${x}`} cx={x} cy={228} r="3.4" fill="#9aa5b1" />)}
+                {/* body */}
+                <ellipse cx="100" cy="150" rx="42" ry="50" fill="url(#wolfFur)" />
+                <ellipse cx="100" cy="158" rx="26" ry="36" fill="#cfd6dd" />
+                {/* arms and paw hands, held out so you can see them */}
+                <rect x="36" y="112" width="18" height="56" rx="9" fill="url(#wolfFur)" transform="rotate(18 45 140)" />
+                <rect x="146" y="112" width="18" height="56" rx="9" fill="url(#wolfFur)" transform="rotate(-18 155 140)" />
+                <circle cx="38" cy="170" r="14" fill="#c8d0d8" />
+                <circle cx="162" cy="170" r="14" fill="#c8d0d8" />
+                {/* fingers */}
+                {[-1, 0, 1].map(i => <circle key={`lf${i}`} cx={30 + i * 8} cy={181} r="4" fill="#9aa5b1" />)}
+                {[-1, 0, 1].map(i => <circle key={`rf${i}`} cx={154 + i * 8} cy={181} r="4" fill="#9aa5b1" />)}
+                {/* claws */}
+                {[-1, 0, 1].map(i => <path key={`lc${i}`} d={`M${27 + i * 8} 185 l3 6 l3 -6 z`} fill="#fff" />)}
+                {[-1, 0, 1].map(i => <path key={`rc${i}`} d={`M${151 + i * 8} 185 l3 6 l3 -6 z`} fill="#fff" />)}
+                {/* head */}
+                <path d="M70 58 l4 -34 l26 20 z" fill="url(#wolfFur)" />
+                <path d="M130 58 l-4 -34 l-26 20 z" fill="url(#wolfFur)" />
+                <path d="M76 46 l3 -20 l15 12 z" fill="#e79ab0" />
+                <path d="M124 46 l-3 -20 l-15 12 z" fill="#e79ab0" />
+                <ellipse cx="100" cy="76" rx="40" ry="34" fill="url(#wolfFur)" />
+                <ellipse cx="100" cy="92" rx="22" ry="18" fill="#cfd6dd" />
+                <ellipse cx="100" cy="88" rx="9" ry="7" fill="#2f3640" />
+                <circle cx="86" cy="68" r="7" fill="#fff" />
+                <circle cx="114" cy="68" r="7" fill="#fff" />
+                <circle cx="87" cy="69" r="3.6" fill="#1f2933" />
+                <circle cx="115" cy="69" r="3.6" fill="#1f2933" />
+                {/* eyebrows, to look big and bad rather than sad */}
+                <path d="M78 56 l16 6" stroke="#3d4855" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+                <path d="M122 56 l-16 6" stroke="#3d4855" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+                {/* grin with two pointy teeth */}
+                <path d="M88 100 q12 10 24 0" stroke="#2f3640" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                <path d="M93 101 l3 8 l3 -8 z" fill="#fff" />
+                <path d="M101 101 l3 8 l3 -8 z" fill="#fff" />
+            </svg>
+        );
+
+        // Pip's silver sword, still in the mound of dirt he dug it out of.
+        const SilverSword = () => (
+            <svg viewBox="0 0 200 200" className="w-full h-full" role="img" aria-label="A silver sword in a mound of dirt">
+                <defs>
+                    <linearGradient id="blade" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#e8eef4" />
+                        <stop offset="45%" stopColor="#ffffff" />
+                        <stop offset="100%" stopColor="#9fb0c0" />
+                    </linearGradient>
+                </defs>
+                <ellipse cx="100" cy="168" rx="76" ry="24" fill="#8d6544" />
+                <ellipse cx="100" cy="162" rx="60" ry="18" fill="#a97d55" />
+                {/* blade */}
+                <path d="M92 34 l8 -20 l8 20 l0 100 l-16 0 z" fill="url(#blade)" stroke="#7d8fa0" strokeWidth="2" />
+                {/* crossguard */}
+                <rect x="66" y="130" width="68" height="12" rx="6" fill="#d9b45a" />
+                <circle cx="70" cy="136" r="7" fill="#f0cf7a" />
+                <circle cx="130" cy="136" r="7" fill="#f0cf7a" />
+                {/* grip and pommel */}
+                <rect x="93" y="142" width="14" height="26" rx="6" fill="#7a4b2a" />
+                <circle cx="100" cy="172" r="9" fill="#d9b45a" />
+                {/* shine */}
+                <path d="M97 44 l0 84" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" opacity=".9" />
+                {[[38, 54], [156, 70], [46, 108], [162, 120]].map(([x, y], i) => (
+                    <path key={i} d={`M${x} ${y} l4 9 l9 4 l-9 4 l-4 9 l-4 -9 l-9 -4 l9 -4 z`} fill="#ffe9a8" />
+                ))}
+            </svg>
+        );
+
+        // The Big Bad Dog frozen in a ball of ice, on his way up to the sky.
+        const IceBall = () => (
+            <svg viewBox="0 0 200 200" className="w-full h-full" role="img" aria-label="The big dog frozen inside a ball of ice">
+                <defs>
+                    {/* Nearly clear in the middle so the dog inside still reads —
+                        the ice is meant to trap him, not hide him. */}
+                    <radialGradient id="iceGrad" cx="38%" cy="32%">
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity=".10" />
+                        <stop offset="62%" stopColor="#9fd8f5" stopOpacity=".28" />
+                        <stop offset="88%" stopColor="#4aa8dc" stopOpacity=".62" />
+                        <stop offset="100%" stopColor="#2b8fc9" stopOpacity=".9" />
+                    </radialGradient>
+                </defs>
+                {[[26, 32], [170, 44], [36, 150], [166, 140], [100, 16]].map(([x, y], i) => (
+                    <path key={i} d={`M${x} ${y} l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 z`} fill="#fff8c4" />
+                ))}
+                {/* the dog inside */}
+                <ellipse cx="100" cy="108" rx="30" ry="26" fill="#b98a5a" />
+                <ellipse cx="100" cy="120" rx="16" ry="13" fill="#e3c39c" />
+                <path d="M74 84 q-10 -22 6 -16 z" fill="#9c703f" />
+                <path d="M126 84 q10 -22 -6 -16 z" fill="#9c703f" />
+                <circle cx="90" cy="100" r="5" fill="#fff" />
+                <circle cx="110" cy="100" r="5" fill="#fff" />
+                <circle cx="91" cy="101" r="2.6" fill="#26313d" />
+                <circle cx="111" cy="101" r="2.6" fill="#26313d" />
+                <ellipse cx="100" cy="116" rx="6" ry="4.6" fill="#3a2b1d" />
+                {/* the ice around him */}
+                <circle cx="100" cy="106" r="58" fill="url(#iceGrad)" stroke="#bfe6fa" strokeWidth="4" />
+                {/* Highlights hug the rim so they never cut across his face. */}
+                <path d="M58 88 a48 48 0 0 1 26 -30" stroke="#ffffff" strokeWidth="7" fill="none" strokeLinecap="round" opacity=".9" />
+                <path d="M146 130 a48 48 0 0 1 -18 22" stroke="#ffffff" strokeWidth="5" fill="none" strokeLinecap="round" opacity=".65" />
+            </svg>
+        );
+
+        // A caped kitten in a heroic pose, for the first story's card.
+        const KittenHero = () => (
+            <svg viewBox="0 0 200 200" className="w-full h-full" role="img" aria-label="A kitten in a red cape">
+                <path d="M62 74 q-34 42 -6 84 q22 -30 44 -34 z" fill="#e23b3b" />
+                <path d="M138 74 q34 42 6 84 q-22 -30 -44 -34 z" fill="#c62f2f" />
+                <ellipse cx="100" cy="128" rx="34" ry="40" fill="#f5a83c" />
+                <ellipse cx="100" cy="136" rx="20" ry="26" fill="#ffd9a0" />
+                <ellipse cx="68" cy="150" rx="9" ry="15" fill="#f5a83c" transform="rotate(20 68 150)" />
+                <ellipse cx="132" cy="150" rx="9" ry="15" fill="#f5a83c" transform="rotate(-20 132 150)" />
+                <path d="M72 62 l2 -26 l22 16 z" fill="#f5a83c" />
+                <path d="M128 62 l-2 -26 l-22 16 z" fill="#f5a83c" />
+                <path d="M78 56 l1 -14 l12 9 z" fill="#f7b8c8" />
+                <path d="M122 56 l-1 -14 l-12 9 z" fill="#f7b8c8" />
+                <circle cx="100" cy="74" r="34" fill="#f5a83c" />
+                <circle cx="88" cy="68" r="7" fill="#fff" />
+                <circle cx="112" cy="68" r="7" fill="#fff" />
+                <circle cx="89" cy="69" r="3.6" fill="#2f3640" />
+                <circle cx="113" cy="69" r="3.6" fill="#2f3640" />
+                <path d="M100 82 l-5 5 l5 4 l5 -4 z" fill="#f2748c" />
+                <path d="M94 92 q6 6 12 0" stroke="#2f3640" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                {[[62, 78], [62, 86], [138, 78], [138, 86]].map(([x, y], i) => (
+                    <path key={i} d={`M${x} ${y} h${x < 100 ? -18 : 18}`} stroke="#e0e6ea" strokeWidth="2.5" strokeLinecap="round" />
+                ))}
+                <path d="M100 22 l4 10 l10 4 l-10 4 l-4 10 l-4 -10 l-10 -4 l10 -4 z" fill="#ffe066" />
+            </svg>
+        );
+
+        const ART = {
+            wolf: WolfFullBody,
+            sword: SilverSword,
+            ice: IceBall,
+            kitten: KittenHero
+        };
+
+        const Illustration = ({ art, className = '' }) => {
+            const Component = ART[art];
+            if (!Component) return null;
+            return (
+                <div className={`mx-auto ${className}`}>
+                    <Component />
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * The stories
+         *
+         * Four separate adventures, five chapters each. Story 1 is the one that
+         * introduces all 40 Dolch pre-primer sight words — `words` on a chapter is
+         * the list it introduces, and reading it unlocks those flash cards. The
+         * later stories deliberately introduce none: they re-use the same 40 words
+         * so the reading level stays put while the stories get longer.
+         *
+         * Chapter ids are strings (s2c4 = story 2, chapter 4) so they stay unique
+         * once there is more than one story.
+         * ------------------------------------------------------------------ */
+
+        const STORY_ONE = [
             {
-                id: 1,
+                id: 's1c1',
                 title: 'Three Little Kittens',
                 emoji: '🐱',
                 cast: ['pip', 'luna', 'boots'],
@@ -412,7 +537,7 @@
                 words: ['here', 'three', 'little', 'I', 'my', 'is', 'red', 'a', 'blue', 'yellow', 'we', 'can', 'play']
             },
             {
-                id: 2,
+                id: 's1c2',
                 title: 'The Magic Powers',
                 emoji: '✨',
                 cast: ['pip', 'luna', 'boots'],
@@ -427,7 +552,7 @@
                 words: ['look', 'go', 'make', 'jump', 'up', 'big', 'and', 'see', 'the', 'funny', 'one', 'two']
             },
             {
-                id: 3,
+                id: 's1c3',
                 title: 'The Big Bad Wolf',
                 emoji: '🐺',
                 cast: ['pip', 'luna', 'boots'],
@@ -443,7 +568,7 @@
                 words: ['in', 'said', 'come', 'to', 'me', 'run', 'not', 'help', 'down']
             },
             {
-                id: 4,
+                id: 's1c4',
                 title: 'The Sly Fox',
                 emoji: '🦊',
                 cast: ['luna', 'boots'],
@@ -459,7 +584,7 @@
                 words: ['where', 'for', 'you', 'find', 'it', 'away']
             },
             {
-                id: 5,
+                id: 's1c5',
                 title: 'The Kittens Win',
                 emoji: '🎉',
                 cast: ['pip', 'luna', 'boots'],
@@ -475,20 +600,319 @@
             }
         ];
 
-        // The 40 Dolch pre-primer sight words, in the order the story introduces
-        // them (chapter by chapter). Every one of these appears in STORY above.
-        const DOLCH_PREPRIMER = STORY.flatMap(chapter => chapter.words);
+        const STORY_TWO = [
+            {
+                id: 's2c1',
+                title: 'A Big Dog',
+                emoji: '🐕',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'dog',
+                sentences: [
+                    'A big dog came to town.',
+                    'He is not a good dog.',
+                    'Look out little kittens!',
+                    'The dog said, I will get you.',
+                    'But we will not run.',
+                    'Pip said, we can win.'
+                ],
+                words: []
+            },
+            {
+                id: 's2c2',
+                title: 'Pip Digs Down Deep',
+                emoji: '🕳️',
+                cast: ['pip'],
+                art: 'sword',
+                sentences: [
+                    'Pip digs in the dirt.',
+                    'He digs down deep.',
+                    'What did Pip find?',
+                    'Pip finds a silver sword!',
+                    'The sword is big.',
+                    'Now we can win.'
+                ],
+                words: []
+            },
+            {
+                id: 's2c3',
+                title: 'Here Comes the Dog',
+                emoji: '🐾',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'dog',
+                sentences: [
+                    'Here comes the big dog.',
+                    'Run little kittens run!',
+                    'Luna can jump up high.',
+                    'Boots is big and strong.',
+                    'Pip has the silver sword.',
+                    'We will not run away.'
+                ],
+                words: []
+            },
+            {
+                id: 's2c4',
+                title: 'Pip and the Sword',
+                emoji: '🗡️',
+                cast: ['pip'],
+                villain: 'dog',
+                art: 'sword',
+                sentences: [
+                    'Pip runs at the big dog.',
+                    'He pokes him in the belly.',
+                    'Poke! Poke! Poke!',
+                    'The big dog said, oh no!',
+                    'He did not like it.',
+                    'Pip is a hero.'
+                ],
+                words: []
+            },
+            {
+                id: 's2c5',
+                title: 'The Dog Runs Away',
+                emoji: '🎉',
+                cast: ['pip', 'luna', 'boots'],
+                sentences: [
+                    'The big dog runs away.',
+                    'He runs and runs.',
+                    'We did it! We win!',
+                    'Look at my silver sword.',
+                    'Come and play with me.',
+                    'Three little kittens can win.'
+                ],
+                words: []
+            }
+        ];
+
+        const STORY_THREE = [
+            {
+                id: 's3c1',
+                title: 'A New Power',
+                emoji: '❄️',
+                cast: ['pip', 'luna'],
+                sentences: [
+                    'Pip has a new power.',
+                    'Look at his paws go.',
+                    'Ice! Pip can make ice.',
+                    'It is cold and blue.',
+                    'Luna said, that is funny!',
+                    'Pip can make zap and ice.'
+                ],
+                words: []
+            },
+            {
+                id: 's3c2',
+                title: 'The Dog Comes Back',
+                emoji: '🐕',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'dog',
+                sentences: [
+                    'The big dog is back.',
+                    'He is mad at Pip.',
+                    'I will get you now.',
+                    'Run little kittens run!',
+                    'But we will not run.',
+                    'Pip said, look at me.'
+                ],
+                words: []
+            },
+            {
+                id: 's3c3',
+                title: 'A Ball of Ice',
+                emoji: '🧊',
+                cast: ['pip'],
+                villain: 'dog',
+                art: 'ice',
+                sentences: [
+                    'Pip made a big zap.',
+                    'Ice! Ice! Ice!',
+                    'The big dog is in ice.',
+                    'He is a ball of ice.',
+                    'He can not run away.',
+                    'Look at the big ball!'
+                ],
+                words: []
+            },
+            {
+                id: 's3c4',
+                title: 'Up to the Sky',
+                emoji: '🌙',
+                cast: ['boots'],
+                art: 'ice',
+                sentences: [
+                    'Boots is big and strong.',
+                    'He picks up the ball.',
+                    'Up, up, up it goes!',
+                    'The ball goes to the sky.',
+                    'Away goes the big dog.',
+                    'Look at him fly!'
+                ],
+                words: []
+            },
+            {
+                id: 's3c5',
+                title: 'Down He Comes',
+                emoji: '🎉',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'dog',
+                sentences: [
+                    'Down comes the ball of ice.',
+                    'The big dog is back.',
+                    'Pip pulls his ear!',
+                    'Ouch, said the big dog.',
+                    'He runs away for good.',
+                    'We did it! We win!'
+                ],
+                words: []
+            }
+        ];
+
+        const STORY_FOUR = [
+            {
+                id: 's4c1',
+                title: 'Who Is in the Woods?',
+                emoji: '🌲',
+                cast: ['pip', 'luna', 'boots'],
+                sentences: [
+                    'Who is in the woods?',
+                    'Is it the sly fox?',
+                    'No. It is the wolf.',
+                    'The big bad wolf is back.',
+                    'Look out little kittens!',
+                    'We will not run away.'
+                ],
+                words: []
+            },
+            {
+                id: 's4c2',
+                title: 'The Whole Wolf',
+                emoji: '🐺',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'wolf',
+                art: 'wolf',
+                sentences: [
+                    'Here is the big bad wolf.',
+                    'Look at his big hands.',
+                    'Look at his big feet.',
+                    'He is very big and bad.',
+                    'But we will not run.',
+                    'Three little kittens can win.'
+                ],
+                words: []
+            },
+            {
+                id: 's4c3',
+                title: 'The Wolf Runs After Us',
+                emoji: '🏃',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'wolf',
+                sentences: [
+                    'The wolf said, come to me.',
+                    'I will get all three.',
+                    'Run little kittens run!',
+                    'Luna can jump up high.',
+                    'The fox said, get them!',
+                    'But we can win.'
+                ],
+                words: []
+            },
+            {
+                id: 's4c4',
+                title: 'All the Powers',
+                emoji: '⚡',
+                cast: ['pip', 'luna', 'boots'],
+                villain: 'wolf',
+                art: 'wolf',
+                sentences: [
+                    'Pip made a big zap.',
+                    'Luna can fly up high.',
+                    'Boots is big and strong.',
+                    'Pip has the silver sword.',
+                    'Ice! The wolf is cold.',
+                    'Zap! The wolf fell down.'
+                ],
+                words: []
+            },
+            {
+                id: 's4c5',
+                title: 'The Kittens Win Again',
+                emoji: '🎉',
+                cast: ['pip', 'luna', 'boots'],
+                sentences: [
+                    'The wolf and the fox run.',
+                    'They run far away.',
+                    'Away, away, away!',
+                    'We did it! We win!',
+                    'Look at my three friends.',
+                    'You can be a hero too.'
+                ],
+                words: []
+            }
+        ];
+
+        const STORIES = [
+            {
+                id: 1,
+                title: 'The Big Bad Wolf',
+                emoji: '🐺',
+                art: 'kitten',
+                blurb: 'Meet the kittens, find their powers, and beat the wolf.',
+                color: 'from-violet-500 to-fuchsia-500',
+                chapters: STORY_ONE
+            },
+            {
+                id: 2,
+                title: 'The Silver Sword',
+                emoji: '🗡️',
+                art: 'sword',
+                blurb: 'Pip digs down deep and finds something shiny.',
+                color: 'from-amber-500 to-orange-500',
+                chapters: STORY_TWO
+            },
+            {
+                id: 3,
+                title: 'The Ball of Ice',
+                emoji: '🧊',
+                art: 'ice',
+                blurb: 'Pip finds a new power, and the big dog comes back.',
+                color: 'from-sky-500 to-cyan-500',
+                chapters: STORY_THREE
+            },
+            {
+                id: 4,
+                title: 'The Wolf Comes Back',
+                emoji: '🐺',
+                art: 'wolf',
+                blurb: 'See the whole wolf — and beat him with everything.',
+                color: 'from-slate-500 to-indigo-500',
+                chapters: STORY_FOUR
+            }
+        ];
+
+        const ALL_CHAPTERS = STORIES.flatMap(story => story.chapters);
+        const storyOf = (chapterId) => STORIES.find(s => s.chapters.some(c => c.id === chapterId));
+
+        // The 40 Dolch pre-primer sight words, in the order story 1 introduces
+        // them. Only story 1 introduces words, so this stays exactly 40 however
+        // many stories get added later.
+        const DOLCH_PREPRIMER = ALL_CHAPTERS.flatMap(chapter => chapter.words);
+
+        // Progress saved before there was more than one story used plain numbers
+        // 1..5 for the wolf story's chapters. Map those forward so a child who
+        // already read it keeps her stars.
+        const normalizeChaptersDone = (chaptersDone) =>
+            (chaptersDone || []).map(id => (typeof id === 'number' ? `s1c${id}` : id));
 
         const wordsUnlockedBy = (chaptersDone) => {
-            // Chapter 1's words are available from the very start; after that a
-            // chapter's words unlock once that chapter has been read.
-            const unlocked = new Set(STORY[0].words);
-            STORY.forEach(chapter => {
-                if (chaptersDone.includes(chapter.id)) chapter.words.forEach(w => unlocked.add(w));
+            // The first chapter's words are available from the very start; after
+            // that a chapter's words unlock once that chapter has been read.
+            const done = normalizeChaptersDone(chaptersDone);
+            const unlocked = new Set(ALL_CHAPTERS[0].words);
+            ALL_CHAPTERS.forEach(chapter => {
+                if (done.includes(chapter.id)) chapter.words.forEach(w => unlocked.add(w));
             });
             // Always offer the next chapter's words too, so the deck keeps growing
             // even if she prefers cards to reading.
-            const nextChapter = STORY.find(c => !chaptersDone.includes(c.id));
+            const nextChapter = ALL_CHAPTERS.find(c => !done.includes(c.id) && c.words.length);
             if (nextChapter) nextChapter.words.forEach(w => unlocked.add(w));
             return DOLCH_PREPRIMER.filter(w => unlocked.has(w));
         };
@@ -500,11 +924,12 @@
          * ------------------------------------------------------------------ */
 
         const BADGES = [
-            { id: 'first_sound',   name: 'First Sound',     emoji: '🔤', description: 'Sounded out your first word!', condition: 'sounded_1' },
-            { id: 'ten_sounds',    name: 'Sound Sleuth',    emoji: '🐾', description: 'Sounded out 10 words!',        condition: 'sounded_10' },
-            { id: 'first_chapter', name: 'Story Starter',   emoji: '📖', description: 'Finished your first chapter!', condition: 'chapter_1' },
-            { id: 'wolf_beaten',   name: 'Wolf Beater',     emoji: '🐺', description: 'Beat the Big Bad Wolf!',       condition: 'chapter_3' },
-            { id: 'all_chapters',  name: 'Story Champion',  emoji: '🏆', description: 'Read the whole story!',        condition: 'chapter_5' },
+            { id: 'first_chapter', name: 'Story Starter',   emoji: '📖', description: 'Finished your first chapter!', condition: 'read_1' },
+            { id: 'wolf_beaten',   name: 'Wolf Beater',     emoji: '🐺', description: 'Beat the Big Bad Wolf!',       condition: 'story_1' },
+            { id: 'sword_finder',  name: 'Sword Finder',    emoji: '🗡️', description: 'Found the silver sword!',      condition: 'story_2' },
+            { id: 'ice_master',    name: 'Ice Master',      emoji: '🧊', description: 'Froze the big dog in ice!',    condition: 'story_3' },
+            { id: 'wolf_again',    name: 'Wolf Beater Two', emoji: '💪', description: 'Beat the wolf a second time!', condition: 'story_4' },
+            { id: 'all_stories',   name: 'Story Champion',  emoji: '🏆', description: 'Read all four stories!',       condition: 'all_stories' },
             { id: 'first_card',    name: 'Card Kitten',     emoji: '🃏', description: 'Got your first flash card!',   condition: 'cards_1' },
             { id: 'ten_mastered',  name: 'Word Wizard',     emoji: '⭐', description: 'Mastered 10 sight words!',     condition: 'mastered_10' },
             { id: 'all_mastered',  name: 'Super Reader',    emoji: '🦸', description: 'Mastered every sight word!',   condition: 'mastered_all' }
@@ -617,51 +1042,38 @@
         };
 
         /* ------------------------------------------------------------------ *
-         * Module 1 — Sound It Out
+         * Module 1 — Read Along
          * ------------------------------------------------------------------ */
 
-        const READ_MODE_KEY = 'mk_read_mode';
-        const loadReadMode = () => {
-            try { return localStorage.getItem(READ_MODE_KEY) === 'along' ? 'along' : 'sound'; }
-            catch (e) { return 'sound'; }
-        };
-
-        const SoundItOutGame = ({ onBadge, onChapterDone, chaptersDone }) => {
+        const ReadAlongGame = ({ onBadge, onChapterDone, chaptersDone }) => {
+            const [story, setStory] = useState(null);
             const [chapter, setChapter] = useState(null);
             const [sentenceIndex, setSentenceIndex] = useState(0);
-            const [mode, setMode] = useState(loadReadMode);
             const [finished, setFinished] = useState(false);
             const [sparkles, setSparkles] = useState([]);
 
             const containerRef = useRef(null);
-            const chunkRefs = useRef([]);      // flat list of { el, rect, wordIndex, chunkIndex }
             const wordRefs = useRef([]);       // flat list of { el, rect, token }
-            const lastChunkRef = useRef(-1);
             const lastWordRef = useRef(-1);
-            const touchedRef = useRef(new Set());
-            const blendedRef = useRef(new Set());
             const draggingRef = useRef(false);
             const startPosRef = useRef({ x: 0, y: 0 });
             const movedRef = useRef(false);
-            const soundedCountRef = useRef(0);
 
             const tokens = chapter ? tokenizeSentence(chapter.sentences[sentenceIndex]) : [];
 
-            // Cache every chunk/word rectangle. Measuring inside pointermove would
-            // hit the layout engine on every single frame, so it happens here
-            // instead and the pointer handlers only read the cache.
+            // Cache every word rectangle. Measuring inside pointermove would hit
+            // the layout engine on every single frame, so it happens here instead
+            // and the pointer handlers only read the cache.
             const measure = useCallback(() => {
-                const remeasure = (entry) => {
+                wordRefs.current.forEach(entry => {
                     if (!entry) return;
                     entry.rect = entry.el ? entry.el.getBoundingClientRect() : null;
-                };
-                chunkRefs.current.forEach(remeasure);
-                wordRefs.current.forEach(remeasure);
+                });
             }, []);
 
-            // Deliberately no dependency array: the render body rebuilds both ref
-            // arrays, so ANY re-render — including a sparkle popping mid-drag —
-            // leaves them unmeasured. Without re-measuring every render, a sweep
+            // Deliberately no dependency array: the render body rebuilds the ref
+            // array, so ANY re-render — including a sparkle popping mid-drag —
+            // leaves it unmeasured. Without re-measuring every render, a sweep
             // would go dead the moment the first sparkle appeared.
             useLayoutEffect(measure);
 
@@ -675,7 +1087,6 @@
             }, [measure]);
 
             const clearHighlights = () => {
-                chunkRefs.current.forEach(entry => entry?.el?.classList.remove('lit'));
                 wordRefs.current.forEach(entry => entry?.el?.classList.remove('lit'));
             };
 
@@ -711,43 +1122,6 @@
                 return best;
             };
 
-            const handleChunkEnter = (index) => {
-                const entry = chunkRefs.current[index];
-                if (!entry) return;
-
-                // Moving to a different word ends the previous word's attempt and
-                // stops its leftover sounds so the queue doesn't run away.
-                if (entry.wordIndex !== lastWordRef.current) {
-                    stopSpeaking();
-                    touchedRef.current = new Set();
-                    lastWordRef.current = entry.wordIndex;
-                }
-
-                entry.el.classList.add('lit');
-                setTimeout(() => entry.el?.classList.remove('lit'), 650);
-                speak(entry.sound, { rate: 0.55, pitch: 1.1, seed: entry.sound });
-                touchedRef.current.add(entry.chunkIndex);
-
-                // Blend once the whole word has been crossed, not merely when the
-                // finger lands on the last letter.
-                const token = tokens[entry.wordIndex];
-                const isLast = entry.chunkIndex === token.chunks.length - 1;
-                const allTouched = touchedRef.current.size === token.chunks.length;
-                if (isLast && allTouched && !blendedRef.current.has(entry.wordIndex)) {
-                    blendedRef.current.add(entry.wordIndex);
-                    const wordEntry = wordRefs.current[entry.wordIndex];
-                    setTimeout(() => {
-                        speakWholeWord(token);
-                        wordEntry?.el?.classList.add('done');
-                        setTimeout(() => wordEntry?.el?.classList.remove('done'), 600);
-                        popSparkle(wordEntry?.rect);
-                    }, 260);
-                    soundedCountRef.current += 1;
-                    onBadge('sounded_1');
-                    if (soundedCountRef.current >= 10) onBadge('sounded_10');
-                }
-            };
-
             const handleWordEnter = (index) => {
                 const entry = wordRefs.current[index];
                 const token = tokens[index];
@@ -763,29 +1137,18 @@
                 draggingRef.current = true;
                 movedRef.current = false;
                 startPosRef.current = { x: e.clientX, y: e.clientY };
-                lastChunkRef.current = -1;
                 lastWordRef.current = -1;
-                touchedRef.current = new Set();
-                blendedRef.current = new Set();
                 try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
-                // Deliberately silent here. Speaking the letter under the finger on
-                // touch-down would make every plain tap say "tuh… little"; the first
-                // sound waits until the finger has actually started moving.
+                // Deliberately silent here. Speaking the word under the finger on
+                // touch-down made every plain tap say the word twice; the first
+                // word waits until the finger has actually started moving.
             };
 
             const handlePointerAt = (x, y) => {
-                if (mode === 'sound') {
-                    const index = hitTest(chunkRefs.current, x, y);
-                    if (index !== -1 && index !== lastChunkRef.current) {
-                        lastChunkRef.current = index;
-                        handleChunkEnter(index);
-                    }
-                } else {
-                    const index = hitTest(wordRefs.current, x, y);
-                    if (index !== -1 && index !== lastWordRef.current) {
-                        lastWordRef.current = index;
-                        handleWordEnter(index);
-                    }
+                const index = hitTest(wordRefs.current, x, y);
+                if (index !== -1 && index !== lastWordRef.current) {
+                    lastWordRef.current = index;
+                    handleWordEnter(index);
                 }
             };
 
@@ -803,7 +1166,7 @@
             const onPointerUp = (e) => {
                 if (!draggingRef.current) return;
                 draggingRef.current = false;
-                // A tap (no real movement) just says the whole word, in either mode.
+                // A tap (no real movement) just says the whole word.
                 if (!movedRef.current) {
                     const wordIndex = hitTest(wordRefs.current, e.clientX, e.clientY);
                     if (wordIndex !== -1) {
@@ -813,17 +1176,7 @@
                     }
                 }
                 clearHighlights();
-                lastChunkRef.current = -1;
                 lastWordRef.current = -1;
-            };
-
-            const changeMode = (next) => {
-                setMode(next);
-                try { localStorage.setItem(READ_MODE_KEY, next); } catch (e) {}
-                stopSpeaking();
-                speak(next === 'sound'
-                    ? 'Sound it out! Drag your finger slowly over each letter.'
-                    : 'Read along! Slide your finger across the words.', { rate: 0.9 });
             };
 
             const readSentence = () => {
@@ -836,14 +1189,19 @@
                 setChapter(chapterData);
                 setSentenceIndex(0);
                 setFinished(false);
-                blendedRef.current = new Set();
                 stopSpeaking();
                 speak(`${chapterData.title}. ${chapterData.sentences[0]}`, { rate: 0.75, seed: chapterData.title });
             };
 
+            const openStory = (storyData) => {
+                setStory(storyData);
+                setChapter(null);
+                stopSpeaking();
+                speak(storyData.title, { rate: 0.85, seed: storyData.title });
+            };
+
             const nextSentence = () => {
-                if (!chapter) return;
-                blendedRef.current = new Set();
+                if (!chapter || !story) return;
                 if (sentenceIndex + 1 < chapter.sentences.length) {
                     const next = sentenceIndex + 1;
                     setSentenceIndex(next);
@@ -854,24 +1212,82 @@
                     stopSpeaking();
                     speak('You read the whole chapter! Great reading!', { rate: 0.95, pitch: 1.4 });
                     onChapterDone(chapter.id);
-                    onBadge(`chapter_${chapter.id}`);
+                    onBadge('read_1');
+                    // Finishing the last chapter finishes the story.
+                    const done = [...normalizeChaptersDone(chaptersDone), chapter.id];
+                    if (story.chapters.every(c => done.includes(c.id))) {
+                        onBadge(`story_${story.id}`);
+                        if (STORIES.every(s => s.chapters.every(c => done.includes(c.id)))) {
+                            onBadge('all_stories');
+                        }
+                    }
                 }
             };
+
+            const doneIds = normalizeChaptersDone(chaptersDone);
+
+            /* ---- story picker ---- */
+            if (!story) {
+                return (
+                    <div className="bg-gradient-to-b from-violet-400 via-fuchsia-400 to-pink-300 rounded-3xl p-6">
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-2">
+                            📖 Read Along
+                        </h2>
+                        <p className="text-white text-center mb-6 drop-shadow">
+                            Four Magical Kitten stories. Which one shall we read?
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
+                            {STORIES.map(storyData => {
+                                const chaptersRead = storyData.chapters.filter(c => doneIds.includes(c.id)).length;
+                                const complete = chaptersRead === storyData.chapters.length;
+                                return (
+                                    <button
+                                        key={storyData.id}
+                                        data-testid={`story-${storyData.id}`}
+                                        onClick={() => openStory(storyData)}
+                                        className={`bg-gradient-to-br ${storyData.color} rounded-3xl p-5 shadow-xl
+                                            text-left transition-transform hover:scale-105 active:scale-95`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-20 h-20 shrink-0 bg-white bg-opacity-90 rounded-2xl p-1">
+                                                <Illustration art={storyData.art} className="w-full h-full" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="font-bold text-white text-lg drop-shadow">
+                                                    {storyData.emoji} {storyData.title}
+                                                </div>
+                                                <div className="text-white text-sm drop-shadow">{storyData.blurb}</div>
+                                                <div className="text-white text-xs mt-1 drop-shadow">
+                                                    {complete ? '⭐ All read!' : `${chaptersRead} of ${storyData.chapters.length} chapters`}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
 
             /* ---- chapter picker ---- */
             if (!chapter) {
                 return (
                     <div className="bg-gradient-to-b from-violet-400 via-fuchsia-400 to-pink-300 rounded-3xl p-6">
-                        <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-2">
-                            🐾 Sound It Out
-                        </h2>
+                        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                            <BackButton onClick={() => { setStory(null); stopSpeaking(); }} label="← Stories" />
+                            <h2 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                                {story.emoji} {story.title}
+                            </h2>
+                            <div className="w-[90px]" />
+                        </div>
                         <p className="text-white text-center mb-6 drop-shadow">
-                            Pick a chapter of the Magical Kittens story.
+                            Pick a chapter.
                         </p>
                         <div className="grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
-                            {STORY.map(chapterData => {
-                                const previousDone = chapterData.id === 1 || chaptersDone.includes(chapterData.id - 1);
-                                const done = chaptersDone.includes(chapterData.id);
+                            {story.chapters.map((chapterData, index) => {
+                                const previousDone = index === 0 || doneIds.includes(story.chapters[index - 1].id);
+                                const done = doneIds.includes(chapterData.id);
                                 return (
                                     <button
                                         key={chapterData.id}
@@ -888,7 +1304,7 @@
                                             <div className="text-4xl">{previousDone ? chapterData.emoji : '🔒'}</div>
                                             <div>
                                                 <div className="font-bold text-purple-700 text-lg">
-                                                    Chapter {chapterData.id}
+                                                    Chapter {index + 1}
                                                 </div>
                                                 <div className="text-purple-500">{chapterData.title}</div>
                                             </div>
@@ -902,15 +1318,23 @@
                 );
             }
 
+            const chapterNumber = story.chapters.indexOf(chapter) + 1;
+
             /* ---- chapter finished ---- */
             if (finished) {
+                const isLastChapter = chapterNumber === story.chapters.length;
                 return (
                     <div className="bg-gradient-to-b from-violet-400 via-fuchsia-400 to-pink-300 rounded-3xl p-8 text-center">
                         <div className="text-6xl mb-3">🎉</div>
-                        <h2 className="text-3xl font-bold text-white drop-shadow-lg mb-6">
-                            You read Chapter {chapter.id}!
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg mb-2">
+                            You read Chapter {chapterNumber}!
                         </h2>
-                        <div className="flex justify-center gap-6 flex-wrap mb-8">
+                        {isLastChapter && (
+                            <p data-testid="story-complete" className="text-white text-lg drop-shadow mb-4">
+                                That's the end of <strong>{story.title}</strong>. The kittens win again!
+                            </p>
+                        )}
+                        <div className="flex justify-center gap-6 flex-wrap mb-8 mt-4">
                             {chapter.cast.map(id => (
                                 <KittenCard key={id} kitten={KITTENS.find(k => k.id === id)} />
                             ))}
@@ -929,15 +1353,20 @@
                             >
                                 📚 Pick another chapter
                             </button>
+                            <button
+                                data-testid="back-to-stories"
+                                onClick={() => { setChapter(null); setStory(null); stopSpeaking(); }}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                📖 Another story
+                            </button>
                         </div>
                     </div>
                 );
             }
 
             /* ---- reading a sentence ---- */
-            chunkRefs.current = [];
             wordRefs.current = [];
-            let chunkCounter = 0;
 
             return (
                 <div className="bg-gradient-to-b from-violet-400 via-fuchsia-400 to-pink-300 rounded-3xl p-6">
@@ -951,36 +1380,18 @@
                         </div>
                     </div>
 
-                    {/* Reading-mode toggle */}
-                    <div className="flex justify-center gap-2 mb-5">
-                        <button
-                            data-testid="mode-sound"
-                            onClick={() => changeMode('sound')}
-                            className={`px-4 py-2 rounded-full font-bold shadow-lg transition-all ${
-                                mode === 'sound'
-                                    ? 'bg-white text-purple-700'
-                                    : 'bg-white bg-opacity-30 hover:bg-opacity-50 text-white'
-                            }`}
-                        >
-                            🐾 Sound It Out
-                        </button>
-                        <button
-                            data-testid="mode-along"
-                            onClick={() => changeMode('along')}
-                            className={`px-4 py-2 rounded-full font-bold shadow-lg transition-all ${
-                                mode === 'along'
-                                    ? 'bg-white text-purple-700'
-                                    : 'bg-white bg-opacity-30 hover:bg-opacity-50 text-white'
-                            }`}
-                        >
-                            👉 Read Along
-                        </button>
-                    </div>
+                    {/* A picture for the chapters that earn one. Fixed height so it
+                        can never push the words off the bottom of the screen. */}
+                    {chapter.art && (
+                        <div data-testid={`art-${chapter.art}`} className="flex justify-center mb-4">
+                            <div className="h-32 sm:h-44 aspect-square bg-white bg-opacity-90 rounded-3xl p-2 shadow-xl">
+                                <Illustration art={chapter.art} className="w-full h-full" />
+                            </div>
+                        </div>
+                    )}
 
                     <p className="text-center text-white drop-shadow mb-4">
-                        {mode === 'sound'
-                            ? 'Drag your finger slowly over each letter to hear its sound.'
-                            : 'Slide your finger across the words to hear them.'}
+                        Slide your finger across the words to hear them.
                     </p>
 
                     <div
@@ -1000,26 +1411,7 @@
                                     className="word"
                                     ref={el => { wordRefs.current[wordIndex] = { el, rect: null, token }; }}
                                 >
-                                    {token.lead}
-                                    {token.chunks.map((chunk, i) => {
-                                        const flatIndex = chunkCounter++;
-                                        return (
-                                            <span
-                                                key={i}
-                                                data-testid={`chunk-${flatIndex}`}
-                                                className="chunk"
-                                                ref={el => {
-                                                    chunkRefs.current[flatIndex] = {
-                                                        el, rect: null, sound: chunk.sound,
-                                                        wordIndex, chunkIndex: i
-                                                    };
-                                                }}
-                                            >
-                                                {chunk.text}
-                                            </span>
-                                        );
-                                    })}
-                                    {token.trail}
+                                    {token.raw}
                                 </span>
                             ))}
                         </div>
@@ -1378,7 +1770,7 @@
 
         const LandingPage = ({ onSelectModule, chaptersDone, mastered }) => {
             const modules = [
-                { id: 'read',   name: 'Sound It Out',  emoji: '🐾', color: 'from-violet-400 to-fuchsia-500', description: 'Drag your finger over the words of the Magical Kittens story.' },
+                { id: 'read',   name: 'Read Along',    emoji: '📖', color: 'from-violet-400 to-fuchsia-500', description: `${STORIES.length} Magical Kitten stories. Slide your finger across the words.` },
                 { id: 'cards',  name: 'Flash Cards',   emoji: '🃏', color: 'from-sky-400 to-teal-500',       description: 'Sight words from the story — play alone or with a grown-up.' },
                 { id: 'wall',   name: 'Word Wall',     emoji: '⭐', color: 'from-amber-400 to-rose-400',     description: `${mastered} of ${DOLCH_PREPRIMER.length} words mastered.` },
                 { id: 'badges', name: 'Badges',        emoji: '🏅', color: 'from-indigo-400 to-purple-500',  description: `Collect ${BADGES.length} kitten badges!` }
@@ -1450,7 +1842,8 @@
                     const story = await loadProgress('story');
                     const words = await loadProgress('words');
                     const badges = await loadBadges();
-                    chaptersDoneRef.current = story?.chaptersDone || [];
+                    // Migrate any progress saved when chapters were plain numbers.
+                    chaptersDoneRef.current = normalizeChaptersDone(story?.chaptersDone);
                     streaksRef.current = words?.streaks || {};
                     badgesRef.current = badges;
                     setChaptersDone(chaptersDoneRef.current);
@@ -1477,7 +1870,11 @@
 
             const handleChapterDone = useCallback((chapterId) => {
                 if (chaptersDoneRef.current.includes(chapterId)) return;
-                const next = [...chaptersDoneRef.current, chapterId].sort((a, b) => a - b);
+                // Keep them in reading order. Chapter ids are strings now, so sort
+                // by their position in the story list rather than numerically.
+                const order = ALL_CHAPTERS.map(c => c.id);
+                const next = [...chaptersDoneRef.current, chapterId]
+                    .sort((a, b) => order.indexOf(a) - order.indexOf(b));
                 chaptersDoneRef.current = next;
                 setChaptersDone(next);
                 saveProgress('story', { chaptersDone: next });
@@ -1532,7 +1929,7 @@
 
                     <div className="max-w-5xl mx-auto">
                         {module === 'read' && (
-                            <SoundItOutGame
+                            <ReadAlongGame
                                 onBadge={handleBadge}
                                 onChapterDone={handleChapterDone}
                                 chaptersDone={chaptersDone}
