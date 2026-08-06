@@ -58,6 +58,7 @@
   .topbar{position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between;
     align-items:center; padding:12px 16px; z-index:5; pointer-events:none;}
   .topbar > *{pointer-events:auto;}
+  .btnGroup{display:flex; align-items:center; gap:10px;}
   .roundbtn{border:none; cursor:pointer; width:62px; height:62px; border-radius:50%;
     background:#fffdf7; box-shadow:var(--shadow); font-size:28px; display:grid; place-items:center;
     transition:transform .12s;}
@@ -187,13 +188,19 @@
     <div class="topbar" id="topbar" style="display:none;">
       <button class="roundbtn" id="homeBtn" title="Home">🏠</button>
       <div class="badge" id="scoreBadge">⭐ <span id="score">0</span></div>
-      <button class="roundbtn" id="soundBtn" title="Sound effects on/off">🔊</button>
+      <div class="btnGroup">
+        <button class="roundbtn" id="voiceBtn" title="Voice on/off">🗣️</button>
+        <button class="roundbtn" id="soundBtn" title="Sound effects on/off">🔊</button>
+      </div>
     </div>
 
     <!-- HOME -->
     <section class="screen active" id="home">
       <div class="topbar" style="position:absolute; justify-content:flex-end;">
-        <button class="roundbtn" id="soundBtnHome" title="Sound effects on/off">🔊</button>
+        <div class="btnGroup">
+          <button class="roundbtn" id="voiceBtnHome" title="Voice on/off">🗣️</button>
+          <button class="roundbtn" id="soundBtnHome" title="Sound effects on/off">🔊</button>
+        </div>
       </div>
       <h1>Butterfly Garden 🦋</h1>
       <div class="subtitle">Let's learn and play!</div>
@@ -294,12 +301,19 @@ function butterflySVG(size=64, colors){
 }
 
 /* ---------- Sound + Voice engine ---------- */
-/* localStorage can throw on file:// in some browsers — guard it so the game always runs. */
+/* Storage can throw on file:// in some browsers — guard it so the game always runs. */
 const store = {
   get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
-  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  /* session-only: cleared when the tab closes */
+  sget(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } },
+  sset(k,v){ try{ sessionStorage.setItem(k,v); }catch(e){} }
 };
+/* Two separate switches on purpose. Effects are remembered forever; the voice is only ever
+   quieted for the current sitting, so an accidental tap can never leave a child who can't
+   read yet with a game that never speaks to them again. */
 let soundOn = (store.get('bfly_sound') ?? 'on') === 'on';
+let voiceOn = (store.sget('bfly_voice') ?? 'on') === 'on';
 let audioCtx = null;
 function ensureAudio(){ if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }
 
@@ -321,33 +335,57 @@ const SFX = {
   gentle(){ ensureAudio(); tone(330,0,0.18,'sine',0.12); tone(262,0.12,0.22,'sine',0.12); }
 };
 
-/* Voice via Web Speech API. Voice instructions stay on so a non-reader can play. */
+/* Voice via Web Speech API. Only the 🗣️ button silences it — the effects toggle does not,
+   so the spoken instructions stay available to a child who can't read the screen. */
 let voices = [];
-function loadVoices(){ voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; }
+function loadVoices(){ voices = window.speechSynthesis ? (speechSynthesis.getVoices() || []) : []; }
 if(window.speechSynthesis){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
 function bestVoice(){
-  if(!voices.length) loadVoices();
-  const en = voices.filter(v=>/en[-_]/i.test(v.lang) || /^en/i.test(v.lang));
-  return en.find(v=>/female|samantha|zira|google us|aria|jenny/i.test(v.name)) || en[0] || voices[0];
+  // Read the live list every time: Chrome rebuilds its voice objects when the speech engine
+  // reloads, and speaking with a stale one fails silently. The cache is only a fallback for
+  // the moment right after load when the list still comes back empty.
+  const live = window.speechSynthesis ? (speechSynthesis.getVoices() || []) : [];
+  if(live.length) voices = live;
+  const list = live.length ? live : voices;
+  const en = list.filter(v=>/en[-_]/i.test(v.lang) || /^en/i.test(v.lang));
+  return en.find(v=>/female|samantha|zira|google us|aria|jenny/i.test(v.name)) || en[0] || list[0];
 }
 function say(text, {rate=0.92, pitch=1.18}={}){
-  if(!soundOn) return;            // the sound toggle mutes voice as well as effects
+  if(!voiceOn) return;
   if(!window.speechSynthesis) return;
   try{
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    const v = bestVoice(); if(v) u.voice = v;
-    u.rate=rate; u.pitch=pitch; u.volume=1;
-    speechSynthesis.speak(u);
-  }catch(e){}
+    // Chrome can leave the synth paused after a cancel or a backgrounded tab, and then
+    // quietly swallows everything it is asked to say from then on.
+    speechSynthesis.resume();
+    const busy = speechSynthesis.speaking || speechSynthesis.pending;
+    if(busy) speechSynthesis.cancel();
+    const start = ()=>{
+      try{
+        const u = new SpeechSynthesisUtterance(text);
+        const v = bestVoice(); if(v) u.voice = v;
+        u.rate=rate; u.pitch=pitch; u.volume=1;
+        u.onerror = e => { if(e.error !== 'interrupted' && e.error !== 'canceled') console.warn('Butterfly Garden: speech failed —', e.error); };
+        speechSynthesis.speak(u);
+      }catch(e){ console.warn('Butterfly Garden: speech failed —', e); }
+    };
+    // Cancelling and speaking in the same tick makes Chrome drop the new utterance, so when
+    // there was something to stop, hand the new line over on the next tick instead.
+    if(busy) setTimeout(start, 60); else start();
+  }catch(e){ console.warn('Butterfly Garden: speech failed —', e); }
 }
 
-/* ---------- Sound toggle UI ---------- */
+/* ---------- Sound + voice toggle UI ---------- */
 function refreshSoundIcons(){ const ic = soundOn?'🔊':'🔇'; $('#soundBtn').textContent=ic; $('#soundBtnHome').textContent=ic; }
-function toggleSound(){
+function refreshVoiceIcons(){ const ic = voiceOn?'🗣️':'🤫'; $('#voiceBtn').textContent=ic; $('#voiceBtnHome').textContent=ic; }
+function toggleSound(){        // chimes and cheers only — never the voice
   soundOn = !soundOn; store.set('bfly_sound', soundOn?'on':'off');
   refreshSoundIcons();
   if(soundOn){ ensureAudio(); SFX.pop(); }
+}
+function toggleVoice(){        // spoken instructions, for this sitting only
+  voiceOn = !voiceOn; store.sset('bfly_voice', voiceOn?'on':'off');
+  refreshVoiceIcons();
+  if(voiceOn) say('Voice is back on!');
   else if(window.speechSynthesis){
     speechSynthesis.cancel();
     // Chrome occasionally fails to stop an in-flight utterance on the first cancel() call.
@@ -356,7 +394,10 @@ function toggleSound(){
 }
 $('#soundBtn').onclick = toggleSound;
 $('#soundBtnHome').onclick = toggleSound;
+$('#voiceBtn').onclick = toggleVoice;
+$('#voiceBtnHome').onclick = toggleVoice;
 refreshSoundIcons();
+refreshVoiceIcons();
 
 /* ---------- Score ---------- */
 let score = 0;
@@ -766,10 +807,14 @@ $('#flyBtn').onclick = ()=>{
   tryNext();
 })();
 
-/* greet on first load */
-window.addEventListener('load', ()=> setTimeout(()=>say('Welcome to the Butterfly Garden! Pick a game.'), 600));
-/* unlock audio on first touch anywhere */
-document.addEventListener('pointerdown', ensureAudio, {once:true});
+/* Unlock audio and greet on the first touch anywhere. Browsers refuse both sound and speech
+   until the page has been tapped once, so greeting on load just loses the welcome line. */
+document.addEventListener('pointerdown', e=>{
+  ensureAudio();
+  // If that first tap landed on a button, it is about to say something of its own — let it.
+  if(e.target.closest('button')) return;
+  if($('#home').classList.contains('active')) say('Welcome to the Butterfly Garden! Pick a game.');
+}, {once:true});
 </script>
 </body>
 </html>

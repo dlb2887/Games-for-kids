@@ -27,8 +27,12 @@ audio). Tap any butterfly to hear it flap!
 
 - **It talks.** The game reads the questions, numbers, and letters out loud using the browser's
   built-in voice, so a child who can't read yet can still play.
-- **Sound effects on/off.** Tap the 🔊 button (top-right). It remembers the choice next time.
-  Turning effects off keeps the spoken instructions but mutes the chimes/cheers.
+- **Two separate buttons (top-right).** 🔊 turns the chimes and cheers on/off, and it remembers the
+  choice next time. 🗣️ turns the spoken instructions on/off — turning off effects never silences the
+  voice, so the game always keeps talking a pre-reader through it.
+- **The voice always comes back.** Muting the voice only lasts for the current sitting; close the
+  game and open it again and it's talking, so a stray tap can't leave a child with a game that
+  never speaks to them again.
 - **No timers, no "you lose."** Wrong answers get a gentle "try again." Right answers get a cheer,
   a star ⭐, and a flutter of confetti butterflies.
 - **No accounts, no internet, no data collected.** Everything runs right in the browser.
