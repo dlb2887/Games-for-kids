@@ -40,6 +40,17 @@
             background-color: rgba(253, 224, 71, .75);
             transform: scale(1.08);
         }
+        /* A card tapped out of order shakes its head rather than moving — she
+           loses nothing, it just isn't the one. */
+        @keyframes card-wobble {
+            0%, 100% { transform: translateX(0) rotate(0); }
+            20%      { transform: translateX(-7px) rotate(-3deg); }
+            40%      { transform: translateX(7px) rotate(3deg); }
+            60%      { transform: translateX(-5px) rotate(-2deg); }
+            80%      { transform: translateX(5px) rotate(2deg); }
+        }
+        .wobble { animation: card-wobble .45s ease; }
+
         .word.done { animation: word-pop .5s ease; }
         @keyframes word-pop {
             0%   { transform: scale(1); }
@@ -490,11 +501,61 @@
             </svg>
         );
 
+        // The Wicked Queen from the Snow White retelling — a cat queen in a dark
+        // gown, holding out the bad red apple.
+        const WickedQueen = () => (
+            <svg viewBox="0 0 200 200" className="w-full h-full" role="img" aria-label="The Wicked Queen holding a red apple">
+                <defs>
+                    <linearGradient id="gown" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6d3f8f" />
+                        <stop offset="100%" stopColor="#3d2154" />
+                    </linearGradient>
+                </defs>
+                {/* gown */}
+                <path d="M100 96 L142 186 L58 186 Z" fill="url(#gown)" />
+                <path d="M100 96 L118 186 L82 186 Z" fill="#8b57ad" opacity=".55" />
+                {/* collar */}
+                <path d="M74 104 q26 -18 52 0 q-26 12 -52 0 z" fill="#2a1638" />
+                {/* arm holding the apple out */}
+                <rect x="132" y="112" width="14" height="42" rx="7" fill="url(#gown)" transform="rotate(-24 139 133)" />
+                <circle cx="156" cy="126" r="9" fill="#d8c7e6" />
+                {/* the bad apple */}
+                <circle cx="166" cy="112" r="15" fill="#d92b2b" />
+                <circle cx="161" cy="107" r="4.5" fill="#ff8080" opacity=".8" />
+                <path d="M166 97 q3 -9 11 -10 q-5 7 -8 11 z" fill="#3f9642" />
+                <path d="M166 97 l0 -7" stroke="#6b4423" strokeWidth="3" strokeLinecap="round" />
+                {/* head */}
+                <path d="M74 62 l0 -26 l22 16 z" fill="#5a4664" />
+                <path d="M126 62 l0 -26 l-22 16 z" fill="#5a4664" />
+                <path d="M80 56 l0 -14 l11 9 z" fill="#a98cb8" />
+                <path d="M120 56 l0 -14 l-11 9 z" fill="#a98cb8" />
+                <circle cx="100" cy="72" r="32" fill="#6b5676" />
+                <ellipse cx="100" cy="84" rx="17" ry="13" fill="#d8c7e6" />
+                <path d="M100 78 l-5 5 l5 4 l5 -4 z" fill="#c46b8a" />
+                {/* narrowed, unfriendly eyes */}
+                <ellipse cx="88" cy="66" rx="7" ry="6" fill="#fff" />
+                <ellipse cx="112" cy="66" rx="7" ry="6" fill="#fff" />
+                <ellipse cx="89" cy="67" rx="3.4" ry="4.4" fill="#2b1d33" />
+                <ellipse cx="113" cy="67" rx="3.4" ry="4.4" fill="#2b1d33" />
+                <path d="M80 56 l14 5" stroke="#3a2a45" strokeWidth="3.5" strokeLinecap="round" />
+                <path d="M120 56 l-14 5" stroke="#3a2a45" strokeWidth="3.5" strokeLinecap="round" />
+                <path d="M92 92 q8 -6 16 0" stroke="#3a2a45" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                {/* crown */}
+                <path d="M76 40 l6 -18 l8 12 l10 -16 l10 16 l8 -12 l6 18 z" fill="#f0cf7a" stroke="#c9a648" strokeWidth="2" />
+                <circle cx="100" cy="30" r="4" fill="#d92b2b" />
+                {/* whiskers */}
+                {[[68, 80], [68, 88], [132, 80], [132, 88]].map(([x, y], i) => (
+                    <path key={i} d={`M${x} ${y} h${x < 100 ? -14 : 14}`} stroke="#d8c7e6" strokeWidth="2.5" strokeLinecap="round" />
+                ))}
+            </svg>
+        );
+
         const ART = {
             wolf: WolfFullBody,
             sword: SilverSword,
             ice: IceBall,
-            kitten: KittenHero
+            kitten: KittenHero,
+            queen: WickedQueen
         };
 
         const Illustration = ({ art, className = '' }) => {
@@ -920,6 +981,120 @@
         const MASTERY_STREAK = 3;
 
         /* ------------------------------------------------------------------ *
+         * Retelling tales
+         *
+         * Fairy-tale plots recast with the kitten cast, for the comprehension
+         * module: read the tale, then put what happened back in order.
+         *
+         * `events` is the true order. `short` picks three of them for the
+         * first/next/last level — indices into `events`, so the easy version can
+         * never contradict the full one.
+         *
+         * Every event carries an emoji as well as a sentence: she is still a
+         * pre-reader, so ordering by picture is the real skill and the words are
+         * support rather than a gate.
+         * ------------------------------------------------------------------ */
+
+        const TALES = [
+            {
+                id: 'snow',
+                title: 'Snow White',
+                emoji: '🍎',
+                art: 'queen',
+                villain: 'Wicked Queen',
+                villainEmoji: '👑',
+                color: 'from-rose-500 to-purple-600',
+                blurb: 'Luna, a bad apple, and a Wicked Queen.',
+                pages: [
+                    'Luna is a good little kitten.',
+                    'The Wicked Queen is mad at her.',
+                    'The Queen makes a bad red apple.',
+                    'Luna eats it and falls asleep.',
+                    'A true love kiss wakes her up!',
+                    'Then they all have a big wedding.'
+                ],
+                events: [
+                    { emoji: '👑', text: 'The Queen is mad at Luna.' },
+                    { emoji: '🍎', text: 'She makes a bad red apple.' },
+                    { emoji: '😋', text: 'Luna eats the apple.' },
+                    { emoji: '😴', text: 'Luna falls fast asleep.' },
+                    { emoji: '💋', text: 'A kiss wakes her up.' },
+                    { emoji: '💒', text: 'They all have a wedding.' }
+                ],
+                short: [2, 3, 5]
+            },
+            {
+                id: 'red',
+                title: 'Little Red Riding Hood',
+                emoji: '🧺',
+                art: 'wolf',
+                villain: 'Big Bad Wolf',
+                villainEmoji: '🐺',
+                color: 'from-red-500 to-orange-500',
+                blurb: 'Pip has a red cape and a basket.',
+                pages: [
+                    'Pip has a little red cape.',
+                    'He takes a basket to Granny.',
+                    'The Big Bad Wolf sees him go.',
+                    'The wolf runs to Granny first.',
+                    'But Pip can make a big zap!',
+                    'The wolf runs away and away.'
+                ],
+                events: [
+                    { emoji: '🧺', text: 'Pip takes a basket to Granny.' },
+                    { emoji: '🌲', text: 'He walks into the woods.' },
+                    { emoji: '🐺', text: 'The Big Bad Wolf sees him.' },
+                    { emoji: '🏠', text: 'The wolf gets there first.' },
+                    { emoji: '⚡', text: 'Pip zaps the wolf!' },
+                    { emoji: '🎉', text: 'The wolf runs away.' }
+                ],
+                short: [0, 2, 5]
+            },
+            {
+                id: 'pigs',
+                title: 'The Three Little Kittens',
+                emoji: '🏠',
+                // The kitten rather than the wolf, so this card doesn't look
+                // identical to Red Riding Hood's on the picker.
+                art: 'kitten',
+                villain: 'Big Bad Wolf',
+                villainEmoji: '🐺',
+                color: 'from-amber-500 to-lime-600',
+                blurb: 'Three houses, and a wolf who huffs.',
+                pages: [
+                    'Pip makes a house of hay.',
+                    'Luna makes a house of sticks.',
+                    'Boots makes a house of bricks.',
+                    'The wolf blows the hay down.',
+                    'The wolf blows the sticks down.',
+                    'But the bricks do not fall!'
+                ],
+                events: [
+                    { emoji: '🌾', text: 'Pip makes a house of hay.' },
+                    { emoji: '🪵', text: 'Luna makes a house of sticks.' },
+                    { emoji: '🧱', text: 'Boots makes a house of bricks.' },
+                    { emoji: '💨', text: 'The wolf blows the hay down.' },
+                    { emoji: '🌬️', text: 'The wolf blows the sticks down.' },
+                    { emoji: '💪', text: 'The bricks do not fall down!' }
+                ],
+                short: [0, 3, 5]
+            }
+        ];
+
+        const RETELL_LEVELS = [
+            { id: 'short', name: 'First, Next, Last', emoji: '🥉', count: 3 },
+            { id: 'full',  name: 'The Whole Story',   emoji: '🥇', count: 6 }
+        ];
+
+        // A tale's cards for a level: the three picked events, or all six.
+        const eventsForLevel = (tale, levelId) =>
+            levelId === 'short'
+                ? tale.short.map(index => ({ ...tale.events[index], order: index }))
+                : tale.events.map((event, index) => ({ ...event, order: index }));
+
+        const retellKey = (taleId, levelId) => `${taleId}:${levelId}`;
+
+        /* ------------------------------------------------------------------ *
          * Badges
          * ------------------------------------------------------------------ */
 
@@ -930,6 +1105,8 @@
             { id: 'ice_master',    name: 'Ice Master',      emoji: '🧊', description: 'Froze the big dog in ice!',    condition: 'story_3' },
             { id: 'wolf_again',    name: 'Wolf Beater Two', emoji: '💪', description: 'Beat the wolf a second time!', condition: 'story_4' },
             { id: 'all_stories',   name: 'Story Champion',  emoji: '🏆', description: 'Read all four stories!',       condition: 'all_stories' },
+            { id: 'first_retell',  name: 'Storyteller',     emoji: '🔀', description: 'Put your first story in order!', condition: 'retell_1' },
+            { id: 'all_retold',    name: 'Master Reteller', emoji: '🎭', description: 'Retold every fairy tale!',     condition: 'retell_all' },
             { id: 'first_card',    name: 'Card Kitten',     emoji: '🃏', description: 'Got your first flash card!',   condition: 'cards_1' },
             { id: 'ten_mastered',  name: 'Word Wizard',     emoji: '⭐', description: 'Mastered 10 sight words!',     condition: 'mastered_10' },
             { id: 'all_mastered',  name: 'Super Reader',    emoji: '🦸', description: 'Mastered every sight word!',   condition: 'mastered_all' }
@@ -1446,7 +1623,355 @@
         };
 
         /* ------------------------------------------------------------------ *
-         * Module 2 — Flash Cards
+         * Module 2 — Retell It
+         *
+         * Read the tale, then put what happened back in order. Reading comes
+         * first on purpose: ordering events you haven't heard is a guessing
+         * game, not comprehension.
+         * ------------------------------------------------------------------ */
+
+        const RetellGame = ({ onBadge, retellDone, onRetellDone }) => {
+            const [tale, setTale] = useState(null);
+            const [level, setLevel] = useState(null);
+            const [phase, setPhase] = useState('read');   // 'read' | 'order' | 'done'
+            const [pageIndex, setPageIndex] = useState(0);
+            const [cards, setCards] = useState([]);       // shuffled, still to place
+            const [placed, setPlaced] = useState([]);     // in the order she picked
+            const [wrongId, setWrongId] = useState(null);
+            const [mistakes, setMistakes] = useState(0);
+
+            const openLevel = (taleData, levelData) => {
+                setTale(taleData);
+                setLevel(levelData);
+                setPhase('read');
+                setPageIndex(0);
+                setPlaced([]);
+                setWrongId(null);
+                setMistakes(0);
+                setCards(shuffle(eventsForLevel(taleData, levelData.id)));
+                stopSpeaking();
+                speak(`${taleData.title}. ${taleData.pages[0]}`, { rate: 0.8, seed: taleData.title });
+            };
+
+            const backToTales = () => {
+                setTale(null);
+                setLevel(null);
+                stopSpeaking();
+            };
+
+            /* ---- read phase ---- */
+            const nextPage = () => {
+                if (!tale) return;
+                if (pageIndex + 1 < tale.pages.length) {
+                    const next = pageIndex + 1;
+                    setPageIndex(next);
+                    stopSpeaking();
+                    speak(tale.pages[next], { rate: 0.75, seed: tale.title });
+                } else {
+                    setPhase('order');
+                    stopSpeaking();
+                    speak('Now, what happened first? Tap the pictures in order.', { rate: 0.9 });
+                }
+            };
+
+            const rereadPage = () => {
+                if (!tale) return;
+                stopSpeaking();
+                speak(tale.pages[pageIndex], { rate: 0.75, seed: tale.title });
+            };
+
+            /* ---- order phase ---- */
+            // The next card she should be looking for is whichever of the
+            // remaining ones comes earliest in the real story.
+            const expectedOrder = cards.length
+                ? Math.min(...cards.map(card => card.order))
+                : null;
+
+            // What the retell says out loud: "First… Next… Last…" reads naturally
+            // even when there are several middles.
+            const positionWord = (index, total) => {
+                if (index === 0) return 'First';
+                if (index === total - 1) return 'Last';
+                return 'Next';
+            };
+
+            // What the slot shows. On a six-slot board four slots labelled NEXT is
+            // no help at all, so the middles are numbered instead.
+            const slotLabel = (index, total) => {
+                if (index === 0) return 'FIRST';
+                if (index === total - 1) return 'LAST';
+                return total > 3 ? String(index + 1) : 'NEXT';
+            };
+
+            const handleCardTap = (card) => {
+                if (card.order !== expectedOrder) {
+                    setMistakes(m => m + 1);
+                    setWrongId(card.order);
+                    setTimeout(() => setWrongId(null), 700);
+                    stopSpeaking();
+                    speak('That one comes later. What happened first?', { rate: 0.9 });
+                    return;
+                }
+
+                const nextPlaced = [...placed, card];
+                const nextCards = cards.filter(c => c.order !== card.order);
+                setPlaced(nextPlaced);
+                setCards(nextCards);
+                stopSpeaking();
+                speak(card.text, { rate: 0.8, seed: tale.title });
+
+                if (!nextCards.length) {
+                    setPhase('done');
+                    onRetellDone(retellKey(tale.id, level.id));
+                    onBadge('retell_1');
+                    // Read the whole thing back in order — this replay is the
+                    // retelling, and it's the point of the module.
+                    setTimeout(() => {
+                        speak('You did it! Here is your story.', { rate: 0.95, pitch: 1.4 });
+                        nextPlaced.forEach((event, index) => {
+                            speak(`${positionWord(index, nextPlaced.length)}, ${event.text}`,
+                                { rate: 0.75, seed: tale.title });
+                        });
+                    }, 700);
+                }
+            };
+
+            const retellAgain = () => {
+                stopSpeaking();
+                placed.forEach((event, index) => {
+                    speak(`${positionWord(index, placed.length)}, ${event.text}`,
+                        { rate: 0.75, seed: tale.title });
+                });
+            };
+
+            /* ---- tale picker ---- */
+            if (!tale || !level) {
+                return (
+                    <div className="bg-gradient-to-b from-emerald-400 via-teal-400 to-cyan-300 rounded-3xl p-6">
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg text-center mb-2">
+                            🔀 Retell It
+                        </h2>
+                        <p className="text-white text-center mb-6 drop-shadow">
+                            Read a story, then put what happened in order.
+                        </p>
+                        <div className="grid gap-4 max-w-3xl mx-auto">
+                            {TALES.map(taleData => (
+                                <div
+                                    key={taleData.id}
+                                    className={`bg-gradient-to-br ${taleData.color} rounded-3xl p-5 shadow-xl`}
+                                >
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <div className="w-20 h-20 shrink-0 bg-white bg-opacity-90 rounded-2xl p-1">
+                                            <Illustration art={taleData.art} className="w-full h-full" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-white text-lg drop-shadow">
+                                                {taleData.emoji} {taleData.title}
+                                            </div>
+                                            <div className="text-white text-sm drop-shadow">{taleData.blurb}</div>
+                                            <div className="text-white text-xs mt-1 drop-shadow">
+                                                {taleData.villainEmoji} {taleData.villain}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3 flex-wrap">
+                                        {RETELL_LEVELS.map((levelData, index) => {
+                                            const previous = RETELL_LEVELS[index - 1];
+                                            const unlocked = !previous ||
+                                                retellDone.includes(retellKey(taleData.id, previous.id));
+                                            const done = retellDone.includes(retellKey(taleData.id, levelData.id));
+                                            return (
+                                                <button
+                                                    key={levelData.id}
+                                                    data-testid={`retell-${taleData.id}-${levelData.id}`}
+                                                    disabled={!unlocked}
+                                                    onClick={() => openLevel(taleData, levelData)}
+                                                    className={`px-4 py-2 rounded-full font-bold shadow-lg transition-transform ${
+                                                        unlocked
+                                                            ? 'bg-white text-purple-700 hover:scale-105 active:scale-95'
+                                                            : 'bg-white bg-opacity-40 text-purple-500 cursor-not-allowed'
+                                                    }`}
+                                                >
+                                                    {unlocked ? levelData.emoji : '🔒'} {levelData.name}
+                                                    {done ? ' ⭐' : ''}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+
+            /* ---- read phase ---- */
+            if (phase === 'read') {
+                return (
+                    <div className="bg-gradient-to-b from-emerald-400 via-teal-400 to-cyan-300 rounded-3xl p-6">
+                        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                            <BackButton onClick={backToTales} label="← Stories" />
+                            <h2 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                                {tale.emoji} {tale.title}
+                            </h2>
+                            <div className="text-white font-bold drop-shadow">
+                                {pageIndex + 1} / {tale.pages.length}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-center mb-4">
+                            <div className="h-32 sm:h-40 aspect-square bg-white bg-opacity-90 rounded-3xl p-2 shadow-xl">
+                                <Illustration art={tale.art} className="w-full h-full" />
+                            </div>
+                        </div>
+
+                        <div
+                            data-testid="tale-page"
+                            className="bg-white rounded-3xl px-5 py-8 shadow-2xl text-center
+                                text-[28px] sm:text-[36px] font-bold text-purple-800 leading-snug"
+                        >
+                            {tale.pages[pageIndex]}
+                        </div>
+
+                        <div className="flex justify-center gap-3 mt-6 flex-wrap">
+                            <button
+                                data-testid="reread"
+                                onClick={rereadPage}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                🔊 Read it again
+                            </button>
+                            <button
+                                data-testid="next-page"
+                                onClick={nextPage}
+                                className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                            >
+                                {pageIndex + 1 < tale.pages.length ? 'Next →' : "Now let's order it! 🔀"}
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            /* ---- ordering, and the finished retell ---- */
+            const total = level.count;
+            const finished = phase === 'done';
+
+            return (
+                <div className="bg-gradient-to-b from-emerald-400 via-teal-400 to-cyan-300 rounded-3xl p-6">
+                    <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                        <BackButton onClick={backToTales} label="← Stories" />
+                        <h2 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                            {tale.emoji} {tale.title}
+                        </h2>
+                        <div className="text-white font-bold drop-shadow" data-testid="placed-count">
+                            {placed.length} / {total}
+                        </div>
+                    </div>
+
+                    <p className="text-center text-white drop-shadow mb-4">
+                        {finished
+                            ? 'That is the whole story, in order!'
+                            : placed.length === 0
+                                ? 'What happened first? Tap it.'
+                                : placed.length === total - 1
+                                    ? 'What happened last?'
+                                    : 'What happened next?'}
+                    </p>
+
+                    {/* the row she is building */}
+                    <div className="flex flex-wrap justify-center gap-3 mb-6" data-testid="placed-row">
+                        {Array.from({ length: total }).map((_, slot) => {
+                            const event = placed[slot];
+                            return (
+                                <div
+                                    key={slot}
+                                    data-testid={`slot-${slot}`}
+                                    data-filled={event ? 'true' : 'false'}
+                                    className={`w-[92px] sm:w-32 rounded-2xl p-1.5 text-center shadow-lg ${
+                                        event ? 'bg-white' : 'bg-white bg-opacity-30 border-2 border-dashed border-white'
+                                    }`}
+                                >
+                                    <div className="text-[10px] sm:text-xs font-bold text-purple-500 uppercase">
+                                        {slotLabel(slot, total)}
+                                    </div>
+                                    <div className="text-2xl sm:text-3xl leading-none py-1">
+                                        {event ? event.emoji : '❓'}
+                                    </div>
+                                    {/* Only reserve caption height once there's a caption —
+                                        six empty slots at full height push the cards off a
+                                        phone screen, and she needs to see both at once. */}
+                                    {event && (
+                                        <div className="text-[10px] sm:text-xs font-bold text-purple-700 leading-tight">
+                                            {event.text}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* the cards still to place */}
+                    {!finished && (
+                        <div className="flex flex-wrap justify-center gap-3" data-testid="card-tray">
+                            {cards.map(card => (
+                                <button
+                                    key={card.order}
+                                    data-testid={`event-${card.order}`}
+                                    data-order={card.order}
+                                    onClick={() => handleCardTap(card)}
+                                    className={`w-28 sm:w-36 rounded-2xl p-2 text-center shadow-xl transition-transform
+                                        hover:scale-105 active:scale-95 ${
+                                        wrongId === card.order ? 'bg-orange-200 wobble' : 'bg-white'
+                                    }`}
+                                >
+                                    <div className="text-3xl sm:text-4xl leading-none py-1">{card.emoji}</div>
+                                    <div className="text-xs sm:text-sm font-bold text-purple-700 leading-tight">
+                                        {card.text}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {finished && (
+                        <div data-testid="retell-done" className="text-center">
+                            <div className="text-5xl mb-3">🎉</div>
+                            <p className="text-white font-bold text-xl drop-shadow mb-6">
+                                {mistakes === 0
+                                    ? 'Perfect! You remembered every bit.'
+                                    : 'You told the whole story!'}
+                            </p>
+                            <div className="flex justify-center gap-3 flex-wrap">
+                                <button
+                                    data-testid="retell-again"
+                                    onClick={retellAgain}
+                                    className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                                >
+                                    🔊 Tell it to me again
+                                </button>
+                                <button
+                                    onClick={() => openLevel(tale, level)}
+                                    className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                                >
+                                    🔁 Do it again
+                                </button>
+                                <button
+                                    data-testid="back-to-tales"
+                                    onClick={backToTales}
+                                    className="bg-white text-purple-700 font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform"
+                                >
+                                    📖 Another story
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        /* ------------------------------------------------------------------ *
+         * Module 3 — Flash Cards
          * ------------------------------------------------------------------ */
 
         const pickDistractors = (word, pool, count) => {
@@ -1771,6 +2296,7 @@
         const LandingPage = ({ onSelectModule, chaptersDone, mastered }) => {
             const modules = [
                 { id: 'read',   name: 'Read Along',    emoji: '📖', color: 'from-violet-400 to-fuchsia-500', description: `${STORIES.length} Magical Kitten stories. Slide your finger across the words.` },
+                { id: 'retell', name: 'Retell It',     emoji: '🔀', color: 'from-emerald-400 to-teal-500',   description: `Read a fairy tale, then put what happened in order.` },
                 { id: 'cards',  name: 'Flash Cards',   emoji: '🃏', color: 'from-sky-400 to-teal-500',       description: 'Sight words from the story — play alone or with a grown-up.' },
                 { id: 'wall',   name: 'Word Wall',     emoji: '⭐', color: 'from-amber-400 to-rose-400',     description: `${mastered} of ${DOLCH_PREPRIMER.length} words mastered.` },
                 { id: 'badges', name: 'Badges',        emoji: '🏅', color: 'from-indigo-400 to-purple-500',  description: `Collect ${BADGES.length} kitten badges!` }
@@ -1825,6 +2351,7 @@
         const App = () => {
             const [module, setModule] = useState('landing');
             const [chaptersDone, setChaptersDone] = useState([]);
+            const [retellDone, setRetellDone] = useState([]);
             const [streaks, setStreaks] = useState({});
             const [unlockedBadges, setUnlockedBadges] = useState([]);
             const [newBadge, setNewBadge] = useState(null);
@@ -1835,18 +2362,22 @@
             // Keep refs in sync with state and read the refs when saving.
             const badgesRef = useRef([]);
             const chaptersDoneRef = useRef([]);
+            const retellDoneRef = useRef([]);
             const streaksRef = useRef({});
 
             useEffect(() => {
                 (async () => {
                     const story = await loadProgress('story');
                     const words = await loadProgress('words');
+                    const retell = await loadProgress('retell');
                     const badges = await loadBadges();
                     // Migrate any progress saved when chapters were plain numbers.
                     chaptersDoneRef.current = normalizeChaptersDone(story?.chaptersDone);
+                    retellDoneRef.current = retell?.retellDone || [];
                     streaksRef.current = words?.streaks || {};
                     badgesRef.current = badges;
                     setChaptersDone(chaptersDoneRef.current);
+                    setRetellDone(retellDoneRef.current);
                     setStreaks(streaksRef.current);
                     setUnlockedBadges(badges);
                     setLoaded(true);
@@ -1879,6 +2410,17 @@
                 setChaptersDone(next);
                 saveProgress('story', { chaptersDone: next });
             }, []);
+
+            const handleRetellDone = useCallback((key) => {
+                if (retellDoneRef.current.includes(key)) return;
+                const next = [...retellDoneRef.current, key];
+                retellDoneRef.current = next;
+                setRetellDone(next);
+                saveProgress('retell', { retellDone: next });
+                // Every tale at both levels earns the Master Reteller badge.
+                const everything = TALES.flatMap(t => RETELL_LEVELS.map(l => retellKey(t.id, l.id)));
+                if (everything.every(k => next.includes(k))) handleBadge('retell_all');
+            }, [handleBadge]);
 
             const handleStreakChange = useCallback((word, value) => {
                 const next = { ...streaksRef.current, [word]: value };
@@ -1933,6 +2475,13 @@
                                 onBadge={handleBadge}
                                 onChapterDone={handleChapterDone}
                                 chaptersDone={chaptersDone}
+                            />
+                        )}
+                        {module === 'retell' && (
+                            <RetellGame
+                                onBadge={handleBadge}
+                                retellDone={retellDone}
+                                onRetellDone={handleRetellDone}
                             />
                         )}
                         {module === 'cards' && (
