@@ -47,18 +47,27 @@ Slide a finger across the sentence and each whole word lights up and is spoken a
 touches it — that's the tracking-left-to-right, one-word-at-a-time practice. A plain **tap**
 on a word just says that word, and **🔊 Read it to me** reads the whole sentence.
 
+The fairy tales in Retell It are read exactly the same way, so there's only one reading
+interaction in the whole game to learn.
+
 ## Retell It — comprehension and retelling
 
 Reading the words is one skill; understanding the story and being able to tell it back is the
 next one. This module does the second.
 
-Pick a tale and it **reads you the story first** — six short pages with a picture, read out
-loud. Only then do the event cards appear, shuffled. She taps the one that happened **first**,
-then **next**, then **last**, and each card she gets right flies up into its slot. When the row
-is full the game **reads the whole story back in order** over the pictures she just arranged —
+Pick a tale and **you read the story first** — six sentences, read exactly the way Read Along
+works: slide a finger across the words and each one lights up and is spoken, or tap a single
+word to hear it on its own. It's real reading practice, not a page that talks at her.
+
+Only then do the event cards appear, shuffled. She taps the one that happened **first**, then
+**next**, then **last**, and each card she gets right flies up into its slot. When the row is
+full the game **reads the whole story back in order** over the pictures she just arranged —
 that replay is the retelling, and it's the point of the whole module.
 
-Ordering events you haven't heard is a guessing game, so the reading always comes first.
+Ordering events you haven't read is a guessing game, so the reading always comes first — the
+first time. Once she's read a tale all the way through, opening it again offers **⏭️ Skip to
+the game**, so going from the 3-card level to the 6-card one doesn't mean sliding through the
+same six sentences twice. A tale she hasn't read yet never shows the skip.
 
 | Tale | Cast | Villain |
 |------|------|---------|
