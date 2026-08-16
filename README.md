@@ -14,6 +14,7 @@ fully offline; a couple pull their frameworks from a CDN, so those need internet
 | 👑 **Princess Learning Adventure** | [`princess-learning-adventure/`](princess-learning-adventure/) | A Disney-princess-themed learning game: letter tracing, spelling, a memory game, and dress-up with favorite princess friends. |
 | 🐱 **Magical Kittens Reading** | [`kitten-reading/`](kitten-reading/) | A learn-to-read game for ages ~4: four superhero-kitten stories you read by sliding a finger across the words, a retelling game where you put a fairy tale back in order, and sight-word flash cards. |
 | 🦄 **Unicorn Spanish** | [`unicorn-spanish/`](unicorn-spanish/) | A first-Spanish game for ages ~4: count from uno to cien with three unicorns, and a memory game where every pair is an English card and its Spanish partner. |
+| 🧜‍♀️ **Mermaid Unicorn Ocean** | [`mermaid-unicorn-ocean/`](mermaid-unicorn-ocean/) | A just-for-fun swimming game: steer a mermaid unicorn around a scrolling ocean, collect shells, and shoot arrows at the bags of cookies. No lessons, no losing. |
 
 More games will be added as their own folders.
 
@@ -34,7 +35,10 @@ Games-for-kids/
 │   ├── index.html
 │   ├── README.md
 │   └── assets/photos/            # optional kitten photos; emoji stand in if absent
-└── unicorn-spanish/
+├── unicorn-spanish/
+│   ├── index.html
+│   └── README.md
+└── mermaid-unicorn-ocean/
     ├── index.html
     └── README.md
 ```
