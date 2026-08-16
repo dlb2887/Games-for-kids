@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Mermaid Unicorn Ocean 🧜‍♀️🦄</title>
+<style>
+  :root{
+    --deep:#062a52; --sea1:#0d5c92; --sea2:#2fa3c9; --shallow:#9fe8ee; --sand:#f0dfae;
+    --pink:#ff8fb1; --purple:#b388ff; --gold:#ffd54f; --green:#8bd45f;
+    --ink:#41355c; --card:#fffdf7;
+    --shadow:0 10px 0 rgba(0,0,0,.08), 0 18px 40px rgba(80,50,120,.18);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0;}
+  body{
+    font-family:'Comic Sans MS','Baloo 2','Trebuchet MS',system-ui,sans-serif;
+    color:var(--ink);
+    background:linear-gradient(180deg,var(--shallow) 0%, var(--sea2) 38%, var(--deep) 100%);
+    overflow:hidden; user-select:none; touch-action:none;
+  }
+
+  /* The ocean itself */
+  #sea{position:fixed; inset:0; width:100%; height:100%; display:none; z-index:1; touch-action:none;}
+  body.playing #sea{display:block;}
+
+  /* Top bar — same chrome as the other games in this collection */
+  .topbar{position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    align-items:center; padding:12px 16px; z-index:5; pointer-events:none;
+    padding-top:calc(12px + env(safe-area-inset-top));}
+  .topbar > *{pointer-events:auto;}
+  .roundbtn{border:none; cursor:pointer; width:62px; height:62px; border-radius:50%;
+    background:var(--card); box-shadow:var(--shadow); font-size:28px; display:grid; place-items:center;
+    transition:transform .12s; font-family:inherit;}
+  .roundbtn:active{transform:scale(.9);}
+  .badge{background:var(--card); box-shadow:var(--shadow); border-radius:30px; padding:8px 18px;
+    font-size:clamp(18px,4vw,24px); font-weight:bold; display:flex; align-items:center; gap:8px;
+    color:var(--ink); white-space:nowrap;}
+  #hud{display:none;}
+  body.playing #hud{display:block;}
+
+  /* Big friendly shoot button */
+  .shootbtn{position:fixed; right:18px; bottom:calc(20px + env(safe-area-inset-bottom));
+    width:84px; height:84px; font-size:40px; z-index:5;
+    background:linear-gradient(180deg,#ffd9e6,#ffa8c8);}
+  .shootbtn:active{transform:scale(.88);}
+
+  /* Screens */
+  .screen{position:fixed; inset:0; z-index:4; display:none; flex-direction:column;
+    align-items:center; justify-content:flex-start;
+    text-align:center; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:linear-gradient(180deg,var(--shallow) 0%, var(--sea2) 38%, var(--deep) 100%);}
+  .screen.active{display:flex; animation:pop .4s ease both;}
+  .sheet{margin:auto; display:flex; flex-direction:column; align-items:center; gap:16px;
+    width:100%; padding:calc(22px + env(safe-area-inset-top)) 18px calc(30px + env(safe-area-inset-bottom));}
+  @keyframes pop{from{opacity:0; transform:scale(.94) translateY(10px);}to{opacity:1; transform:none;}}
+
+  h1{font-size:clamp(30px,7.5vw,60px); margin:0; padding:0 66px; color:#fff; line-height:1.05;
+     text-shadow:0 3px 0 var(--pink), 0 6px 0 var(--purple), 0 10px 18px rgba(0,0,0,.25);
+     letter-spacing:1px;}
+  .subtitle{font-size:clamp(15px,3.4vw,22px); color:#3b3363; background:#ffffffd9;
+     padding:8px 18px; border-radius:30px; box-shadow:var(--shadow); max-width:min(560px,92vw);}
+
+  .bigbtn{
+    border:none; cursor:pointer; color:#fff; font-family:inherit; font-weight:bold;
+    font-size:clamp(22px,5vw,32px); padding:22px 34px; border-radius:28px;
+    box-shadow:var(--shadow); display:flex; align-items:center; gap:14px; min-width:270px;
+    justify-content:center; transition:transform .12s ease, filter .12s ease;
+    background:linear-gradient(180deg,#ffa3c2,#ff6f9c);
+  }
+  .bigbtn:active{transform:translateY(4px) scale(.98); filter:brightness(1.06);}
+  .bigbtn .emoji{font-size:1.3em;}
+
+  .how{background:#ffffffe8; border-radius:28px; box-shadow:var(--shadow); padding:16px 20px;
+    max-width:min(560px,94vw); font-size:clamp(14px,3.2vw,18px); color:#4a3f70; line-height:1.55;}
+  .how b{color:#7b4bbd;}
+  .how .row{display:flex; align-items:center; gap:10px; text-align:left; margin:7px 0;}
+  .how .row .ic{font-size:1.6em; width:1.5em; flex:none; text-align:center;}
+
+  .badgerow{display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:min(560px,94vw);}
+  .bchip{background:#ffffffcc; border-radius:20px; padding:6px 12px; font-size:15px; font-weight:bold;
+    color:#6a5a93; box-shadow:0 4px 0 rgba(0,0,0,.06); opacity:.4; filter:grayscale(1);}
+  .bchip.on{opacity:1; filter:none; background:#fff8d8; color:#8a6a1f;}
+
+  .homesound{position:fixed; top:calc(12px + env(safe-area-inset-top)); right:16px; z-index:6;}
+
+  footer{font-size:13px; opacity:.9;}
+  footer a{color:#fff;}
+
+  /* Popup for badges + big moments */
+  #toast{position:fixed; left:0; right:0; top:calc(84px + env(safe-area-inset-top)); z-index:20;
+    display:flex; justify-content:center; pointer-events:none; padding:0 14px;}
+  #toast .inner{background:#fff; border-radius:26px; box-shadow:var(--shadow); padding:12px 20px;
+    display:none; align-items:center; gap:12px; border:4px solid var(--gold); max-width:94vw;}
+  #toast.show .inner{display:flex; animation:pop .4s cubic-bezier(.34,1.56,.64,1) both;}
+  #toast .em{font-size:38px; line-height:1;}
+  #toast .t1{font-weight:bold; color:#7b4bbd; font-size:17px;}
+  #toast .t2{color:#8a7bb0; font-size:14px;}
+</style>
+</head>
+<body>
+
+<canvas id="sea"></canvas>
+
+<div id="hud">
+  <div class="topbar">
+    <button class="roundbtn" id="homeBtn" data-testid="home" title="Back to the beach">🏠</button>
+    <div class="badge" id="shellCount">🐚 <span id="shellNum">0</span></div>
+    <button class="roundbtn" id="soundBtn" data-testid="sound" title="Sound on/off">🔊</button>
+  </div>
+  <button class="roundbtn shootbtn" id="shootBtn" data-testid="shoot" title="Shoot an arrow">🏹</button>
+</div>
+
+<div id="toast"><div class="inner"><div class="em" id="toastEm">🐚</div>
+  <div><div class="t1" id="toastT1"></div><div class="t2" id="toastT2"></div></div></div></div>
+
+<section class="screen active" id="home">
+  <button class="roundbtn homesound" id="soundBtnHome" data-testid="sound-home" title="Sound on/off">🔊</button>
+  <div class="sheet">
+  <h1>Mermaid Unicorn<br>Ocean</h1>
+  <div class="subtitle">Swim around, collect shells, and pop the cookie bags with your arrows! 🐚🏹</div>
+  <button class="bigbtn" id="playBtn" data-testid="play"><span class="emoji">🌊</span> Play</button>
+  <div class="how">
+    <div class="row"><span class="ic">🦄</span><span><b>You are the mermaid unicorn.</b> Drag your finger (or use the arrow keys) to swim wherever you want.</span></div>
+    <div class="row"><span class="ic">🏹</span><span><b>Tap the sea</b> or press the arrow button to shoot. Your arrows aim themselves!</span></div>
+    <div class="row"><span class="ic">🐚</span><span><b>Swim over shells</b> to collect them.</span></div>
+    <div class="row"><span class="ic">🍪</span><span>The <b>bag of cookies</b> throws chocolate chips at you. Two arrows makes it pop!</span></div>
+    <div class="row"><span class="ic">😼</span><span>The <b>cat</b> helps the cookies and chases you. One arrow sends it tumbling.</span></div>
+    <div class="row"><span class="ic">🥒</span><span>The <b>pickle</b> is your friend — it squirts pickle juice at the cookies all by itself.</span></div>
+    <div class="row"><span class="ic">🐬</span><span>The <b>purple dolphin</b> helps you: it fetches shells, bumps chocolate chips away, and gives you speed boosts.</span></div>
+    <div class="row"><span class="ic">🌀</span><span>Swim into a <b>tunnel</b> to whoosh across the ocean!</span></div>
+    <div class="row"><span class="ic">💗</span><span>Nobody can lose. If you get bonked you just spin around and drop a few shells — pick them back up!</span></div>
+  </div>
+  <div class="badgerow" id="badgeRow"></div>
+  <div class="subtitle" id="bestLine" style="display:none"></div>
+  <footer><a href="../">← All games</a></footer>
+  </div>
+</section>
+
+<script>
+/* ==================================================================== *
+ * Storage — localStorage only, wrapped because file:// can throw.
+ * ==================================================================== */
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+
+let soundOn = (store.get('mo_sound') ?? 'on') === 'on';
+let best = parseInt(store.get('mo_best') || '0', 10) || 0;
+let earned = (() => {
+  try { return new Set(JSON.parse(store.get('mo_badges') || '[]')); }
+  catch(e){ return new Set(); }
+})();
+
+/* ==================================================================== *
+ * Sound — WebAudio tones, same shape as Butterfly Garden's SFX.
+ * ==================================================================== */
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tone(freq, start, dur, type='sine', vol=0.18){
+  if(!soundOn || !audioCtx) return;
+  const t0 = audioCtx.currentTime + start;
+  const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+function slide(f1, f2, start, dur, type='sine', vol=0.16){
+  if(!soundOn || !audioCtx) return;
+  const t0 = audioCtx.currentTime + start;
+  const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(f1, t0);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20,f2), t0 + dur);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+const SFX = {
+  pop(){ ensureAudio(); tone(520,0,0.12,'triangle',0.14); },
+  chime(){ ensureAudio(); tone(880,0,0.10,'sine',0.13); tone(1320,0.06,0.14,'sine',0.10); },
+  swoosh(){ ensureAudio(); slide(900,320,0,0.14,'sawtooth',0.07); },
+  poof(){ ensureAudio(); slide(300,90,0,0.3,'square',0.10); tone(180,0.02,0.22,'triangle',0.10); },
+  bonk(){ ensureAudio(); tone(200,0,0.16,'square',0.10); tone(150,0.10,0.20,'sine',0.10); },
+  squirt(){ ensureAudio(); slide(420,1100,0,0.18,'sine',0.09); },
+  warp(){ ensureAudio(); [392,523,659,880,1175].forEach((f,i)=>tone(f, i*0.05, 0.20,'sine',0.12)); },
+  chirp(){ ensureAudio(); slide(700,1500,0,0.09,'sine',0.09); slide(900,1700,0.10,0.09,'sine',0.07); },
+  cheer(){ ensureAudio(); [392,523,659,784,1046,1318].forEach((f,i)=>tone(f, i*0.08, 0.25,'triangle',0.15)); },
+  tumble(){ ensureAudio(); slide(600,200,0,0.35,'triangle',0.09); }
+};
+
+/* ==================================================================== *
+ * Speech — short and rare, so it never nags.
+ * ==================================================================== */
+function say(text, {rate=0.95, pitch=1.25}={}){
+  if(!soundOn || !('speechSynthesis' in window)) return;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = rate; u.pitch = pitch; u.volume = 1;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function stopSpeaking(){
+  if(!('speechSynthesis' in window)) return;
+  try{
+    speechSynthesis.cancel();
+    // Chrome occasionally fails to stop an in-flight utterance on the first cancel().
+    setTimeout(() => { try{ speechSynthesis.cancel(); }catch(e){} }, 50);
+  }catch(e){}
+}
+
+/* ==================================================================== *
+ * Badges
+ * ==================================================================== */
+const BADGES = [
+  { id:'firstShell', emoji:'🐚', name:'First Shell',      description:'You found your very first shell!' },
+  { id:'popper',     emoji:'🏹', name:'Cookie Popper',    description:'You popped 5 bags of cookies!' },
+  { id:'tunnel',     emoji:'🌀', name:'Tunnel Traveler',  description:'You whooshed through 3 tunnels!' },
+  { id:'dolphin',    emoji:'🐬', name:'Dolphin Friend',   description:'The dolphin brought you 5 shells!' },
+  { id:'pickle',     emoji:'🥒', name:'Pickle Power',     description:'You saw the pickle squirt a cookie!' },
+  { id:'hundred',    emoji:'💯', name:'Hundred Shells',   description:'One hundred shells in one swim!' }
+];
+
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function toast(emoji, line1, line2){
+  document.getElementById('toastEm').textContent = emoji;
+  document.getElementById('toastT1').textContent = line1;
+  document.getElementById('toastT2').textContent = line2 || '';
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 4000);
+}
+function award(id){
+  if(earned.has(id)) return;
+  const b = BADGES.find(x => x.id === id);
+  if(!b) return;
+  earned.add(id);
+  store.set('mo_badges', JSON.stringify([...earned]));
+  SFX.cheer();
+  toast(b.emoji, 'New badge: ' + b.name, b.description);
+  say('New badge! ' + b.name);
+  renderBadges();
+}
+function renderBadges(){
+  const row = document.getElementById('badgeRow');
+  row.innerHTML = '';
+  BADGES.forEach(b => {
+    const d = document.createElement('div');
+    d.className = 'bchip' + (earned.has(b.id) ? ' on' : '');
+    d.textContent = b.emoji + ' ' + b.name;
+    row.appendChild(d);
+  });
+}
+
+/* ==================================================================== *
+ * Little helpers
+ * ==================================================================== */
+const rand  = (a,b) => a + Math.random()*(b-a);
+const randi = (a,b) => Math.floor(rand(a,b+1));
+const pick  = (list) => list[Math.floor(Math.random()*list.length)];
+const clamp = (v,a,b) => v < a ? a : (v > b ? b : v);
+const dist2 = (ax,ay,bx,by) => { const dx = ax-bx, dy = ay-by; return dx*dx + dy*dy; };
+// Frame-rate independent easing toward a target: k is roughly "per second".
+const approach = (cur, target, k, dt) => cur + (target - cur) * (1 - Math.exp(-k*dt));
+
+/* ==================================================================== *
+ * Canvas + emoji sprite cache
+ * ==================================================================== */
+const canvas = document.getElementById('sea');
+const ctx = canvas.getContext('2d');
+let vw = 0, vh = 0, DPR = 1;
+
+// Drawing emoji with fillText every frame is slow on older tablets, so each
+// emoji is rendered once into its own little canvas and blitted after that.
+const spriteCache = new Map();
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
+let canFilter = false;
+try {
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.filter = 'hue-rotate(90deg)';
+  canFilter = probe.filter === 'hue-rotate(90deg)';
+} catch(e){ canFilter = false; }
+
+function sprite(ch, size, filter){
+  const key = ch + '|' + size + '|' + (filter || '') + '|' + DPR;
+  let c = spriteCache.get(key);
+  if(c) return c;
+  const box = Math.ceil(size * 1.45);
+  c = document.createElement('canvas');
+  c.width = c.height = Math.ceil(box * DPR);
+  const g = c.getContext('2d');
+  g.scale(DPR, DPR);
+  if(filter && canFilter) g.filter = filter;
+  g.font = size + 'px ' + EMOJI_FONT;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(ch, box/2, box/2);
+  c.box = box;
+  spriteCache.set(key, c);
+  return c;
+}
+function drawEmoji(g, ch, x, y, size, opts){
+  const o = opts || {};
+  const c = sprite(ch, size, o.filter);
+  const b = c.box;
+  g.save();
+  if(o.alpha !== undefined) g.globalAlpha = o.alpha;
+  g.translate(x, y);
+  if(o.rot) g.rotate(o.rot);
+  if(o.flip === -1) g.scale(-1, 1);
+  g.drawImage(c, -b/2, -b/2, b, b);
+  g.restore();
+}
+
+function resize(){
+  const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+  if(nextDpr !== DPR){ DPR = nextDpr; spriteCache.clear(); }
+  vw = window.innerWidth;
+  vh = window.innerHeight;
+  canvas.width  = Math.round(vw * DPR);
+  canvas.height = Math.round(vh * DPR);
+  canvas.style.width  = vw + 'px';
+  canvas.style.height = vh + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+resize();
+
+/* ==================================================================== *
+ * The ocean — a world several screens across, with a camera that
+ * follows the mermaid unicorn around it.
+ * ==================================================================== */
+const WORLD_W = 2400, WORLD_H = 1800;
+const MARGIN = 70;                       // keeps swimmers off the very edge
+const FLOOR  = WORLD_H - 120;            // sandy bottom
+
+const cam = { x:0, y:0 };
+const me = {
+  x: WORLD_W/2, y: WORLD_H/2, vx:0, vy:0, face:1,
+  tail:0, spin:0, invuln:0, boost:0, warpCool:0, shootCool:0
+};
+const dolphin = { x: me.x-90, y: me.y+40, vx:0, vy:0, face:1, ph:0, boostCool:6, flip:0, brought:0, fetchCool:3 };
+const pickle  = { x: WORLD_W*0.3, y: WORLD_H*0.4, vx:0, vy:0, ph:0, cool:2, target:null };
+
+let shells = [], bags = [], cats = [], chips = [], arrows = [], juice = [], parts = [], tunnels = [];
+let farKelp = [], kelp = [], corals = [], nearBubbles = [], farBubbles = [], fish = [];
+let shellsHeld = 0, bagsPopped = 0, tunnelsUsed = 0, nextMilestone = 0;
+
+const MILESTONES = [
+  { n:10,  say:'Ten shells!' },
+  { n:25,  say:'Twenty five shells! Wow!' },
+  { n:50,  say:'Fifty shells! Amazing!' },
+  { n:100, say:'One hundred shells! You are a shell champion!' }
+];
+
+const TARGET_SHELLS = 54;
+const BAG_COUNT = 6;
+const CAT_COUNT = 3;
+
+function farFromMe(x, y, minDist){
+  return dist2(x, y, me.x, me.y) > minDist*minDist;
+}
+function spawnPoint(minDistFromMe){
+  for(let i = 0; i < 30; i++){
+    const x = rand(MARGIN, WORLD_W-MARGIN), y = rand(MARGIN, FLOOR-40);
+    if(farFromMe(x, y, minDistFromMe)) return { x, y };
+  }
+  return { x: rand(MARGIN, WORLD_W-MARGIN), y: rand(MARGIN, FLOOR-40) };
+}
+
+function newShell(x, y, loose){
+  return { x, y, vx: loose ? rand(-90,90) : 0, vy: loose ? rand(-120,-30) : 0,
+           ph: rand(0,6.28), born: 0, loose: !!loose };
+}
+function newBag(){
+  const p = spawnPoint(420);
+  return { x:p.x, y:p.y, vx:0, vy:0, hp:2, cool:rand(0.6,2.2), stun:0,
+           ph:rand(0,6.28), turn:rand(0.8,2.4), dir:rand(0,6.28), flash:0 };
+}
+function newCat(){
+  const p = spawnPoint(520);
+  return { x:p.x, y:p.y, vx:0, vy:0, ph:rand(0,6.28), flee:0, shot:false, face:1 };
+}
+
+function buildDecor(){
+  farKelp = []; kelp = []; corals = []; nearBubbles = []; farBubbles = []; fish = [];
+  for(let i = 0; i < 26; i++){
+    farKelp.push({ x: rand(0, WORLD_W), h: rand(150, 340), w: rand(14, 30), ph: rand(0,6.28) });
+  }
+  for(let i = 0; i < 34; i++){
+    kelp.push({ x: rand(40, WORLD_W-40), h: rand(120, 300), w: rand(10, 22), ph: rand(0,6.28),
+                hue: randi(120, 165) });
+  }
+  const CORAL = ['🪸','🐠','🐟','🦀','🌿','🐡'];
+  for(let i = 0; i < 26; i++){
+    corals.push({ x: rand(60, WORLD_W-60), y: rand(FLOOR-70, FLOOR+30),
+                  ch: pick(CORAL), size: rand(30, 52), ph: rand(0,6.28) });
+  }
+  // Little schools of fish drifting through the open water. They are pure
+  // scenery — nothing collides with them, they just make the sea feel alive.
+  const FISH = ['🐠','🐟','🐡','🦑','🐙'];
+  for(let s = 0; s < 7; s++){
+    const cx = rand(120, WORLD_W-120), cy = rand(140, FLOOR-120);
+    const ch = pick(FISH), dir = Math.random() < 0.5 ? -1 : 1, sp = rand(14, 34);
+    for(let i = 0; i < randi(3, 6); i++){
+      fish.push({ x: cx + rand(-90,90), y: cy + rand(-50,50), ch,
+                  size: rand(22, 34), dir, sp: sp + rand(-4,4), ph: rand(0,6.28) });
+    }
+  }
+
+  // Bubble layers live in a repeating 600px tile so they cover any world size.
+  for(let i = 0; i < 26; i++) farBubbles.push({ x: rand(0,600), y: rand(0,600), r: rand(3,9),  sp: rand(8,22) });
+  for(let i = 0; i < 14; i++) nearBubbles.push({ x: rand(0,600), y: rand(0,600), r: rand(6,17), sp: rand(20,44) });
+}
+
+function buildTunnels(){
+  // Two pairs of stone arches, each pair well apart so a trip feels like a trip.
+  tunnels = [];
+  const spots = [
+    { x: WORLD_W*0.12, y: WORLD_H*0.20 }, { x: WORLD_W*0.86, y: WORLD_H*0.74 },
+    { x: WORLD_W*0.84, y: WORLD_H*0.18 }, { x: WORLD_W*0.16, y: WORLD_H*0.78 }
+  ];
+  spots.forEach((s, i) => tunnels.push({ x:s.x, y:s.y, ph: rand(0,6.28), partner: i ^ 1,
+                                         hue: i < 2 ? 280 : 190 }));
+}
+
+function resetWorld(){
+  me.x = WORLD_W/2; me.y = WORLD_H/2; me.vx = me.vy = 0; me.face = 1;
+  me.spin = 0; me.invuln = 0; me.boost = 0; me.warpCool = 0; me.shootCool = 0;
+  dolphin.x = me.x - 90; dolphin.y = me.y + 40; dolphin.vx = dolphin.vy = 0;
+  dolphin.boostCool = 6; dolphin.flip = 0; dolphin.brought = 0; dolphin.fetchCool = 3;
+  const pp = spawnPoint(300); pickle.x = pp.x; pickle.y = pp.y; pickle.cool = 2;
+  shells = []; chips = []; arrows = []; juice = []; parts = [];
+  bags = []; cats = [];
+  shellsHeld = 0; bagsPopped = 0; tunnelsUsed = 0; nextMilestone = 0;
+
+  buildDecor();
+  buildTunnels();
+  // Shells come in loose patches so there is always somewhere worth swimming to.
+  while(shells.length < TARGET_SHELLS){
+    const c = spawnPoint(120);
+    const n = randi(3, 6);
+    for(let i = 0; i < n && shells.length < TARGET_SHELLS; i++){
+      shells.push(newShell(clamp(c.x + rand(-110,110), MARGIN, WORLD_W-MARGIN),
+                           clamp(c.y + rand(-90,90),  MARGIN, FLOOR),
+                           false));
+    }
+  }
+  for(let i = 0; i < BAG_COUNT; i++) bags.push(newBag());
+  for(let i = 0; i < CAT_COUNT; i++) cats.push(newCat());
+
+  cam.x = clamp(me.x - vw/2, 0, Math.max(0, WORLD_W - vw));
+  cam.y = clamp(me.y - vh/2, 0, Math.max(0, WORLD_H - vh));
+  updateShellHud();
+}
+
+function updateShellHud(){
+  document.getElementById('shellNum').textContent = shellsHeld;
+}
+
+function burst(x, y, count, color, opts){
+  const o = opts || {};
+  for(let i = 0; i < count; i++){
+    const a = rand(0, Math.PI*2), s = rand(o.slow ? 30 : 70, o.slow ? 110 : 240);
+    parts.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - (o.rise ? 60 : 0),
+                 life: rand(0.4, 0.9), max: 0.9, color, size: o.size || rand(3,7),
+                 ch: o.ch || null });
+  }
+}
+
+function addShell(n){
+  shellsHeld += n;
+  updateShellHud();
+  if(shellsHeld > best){ best = shellsHeld; store.set('mo_best', String(best)); }
+  if(shellsHeld >= 1) award('firstShell');
+  if(shellsHeld >= 100) award('hundred');
+  while(nextMilestone < MILESTONES.length && shellsHeld >= MILESTONES[nextMilestone].n){
+    const m = MILESTONES[nextMilestone++];
+    SFX.cheer();
+    say(m.say);
+    toast('🐚', m.n + ' shells!', 'Keep swimming!');
+    dolphin.flip = 1;
+    burst(me.x, me.y, 26, '#fff2a8', { rise:true, size: 5 });
+  }
+}
+
+/* Getting bonked. Nobody loses — you spin, sparkle, and drop a few shells
+   that you can go straight back and pick up again. */
+function bonk(x, y){
+  if(me.invuln > 0) return;
+  me.invuln = 1.5;
+  me.spin = Math.PI * 2.2;
+  SFX.bonk();
+  burst(x, y, 16, '#ffd6e6', { rise:true });
+  const drop = Math.min(3, shellsHeld);
+  if(drop > 0){
+    shellsHeld -= drop;
+    updateShellHud();
+    for(let i = 0; i < drop; i++){
+      shells.push(newShell(clamp(me.x + rand(-40,40), MARGIN, WORLD_W-MARGIN),
+                           clamp(me.y + rand(-30,30), MARGIN, FLOOR), true));
+    }
+  }
+}
+
+/* ==================================================================== *
+ * Input — pointer drag to swim, quick tap to shoot, keyboard too.
+ * ==================================================================== */
+const keys = new Set();
+let swimTarget = null;          // world-space point the finger is holding
+let pointerId = null, pressX = 0, pressY = 0, pressT = 0, moved = false;
+const TAP_SLOP = 8, TAP_MS = 250;   // same tap-vs-drag threshold the reading game uses
+
+canvas.addEventListener('pointerdown', (e) => {
+  if(pointerId !== null) return;
+  pointerId = e.pointerId;
+  try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+  pressX = e.clientX; pressY = e.clientY; pressT = performance.now(); moved = false;
+  ensureAudio();
+});
+canvas.addEventListener('pointermove', (e) => {
+  if(e.pointerId !== pointerId) return;
+  if(!moved && Math.hypot(e.clientX - pressX, e.clientY - pressY) > TAP_SLOP) moved = true;
+  if(moved) swimTarget = { x: e.clientX + cam.x, y: e.clientY + cam.y };
+});
+function endPointer(e){
+  if(e.pointerId !== pointerId) return;
+  const quick = !moved && (performance.now() - pressT) < TAP_MS;
+  pointerId = null;
+  swimTarget = null;
+  if(quick) shoot();
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+window.addEventListener('keydown', (e) => {
+  if(!playing) return;
+  const k = e.key.toLowerCase();
+  if(k === ' ' || k === 'spacebar'){ e.preventDefault(); ensureAudio(); shoot(); return; }
+  if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(k)){
+    e.preventDefault();
+    ensureAudio();
+    keys.add(k);
+  }
+});
+window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+window.addEventListener('blur', () => keys.clear());
+
+function keyVector(){
+  let dx = 0, dy = 0;
+  if(keys.has('arrowleft')  || keys.has('a')) dx -= 1;
+  if(keys.has('arrowright') || keys.has('d')) dx += 1;
+  if(keys.has('arrowup')    || keys.has('w')) dy -= 1;
+  if(keys.has('arrowdown')  || keys.has('s')) dy += 1;
+  return { dx, dy };
+}
+
+/* Arrows aim themselves at the nearest cookie bag or cat, so a little kid
+   basically never misses. With nothing in range, it fires straight ahead. */
+const AIM_RANGE = 620;
+function shoot(){
+  if(!playing || me.shootCool > 0) return;
+  me.shootCool = 0.26;
+  let bestT = null, bestD = AIM_RANGE * AIM_RANGE;
+  const consider = (t) => { const d = dist2(me.x, me.y, t.x, t.y); if(d < bestD){ bestD = d; bestT = t; } };
+  bags.forEach(consider);
+  cats.forEach(c => { if(c.flee <= 0) consider(c); });
+  let ax, ay;
+  if(bestT){
+    ax = bestT.x - me.x; ay = bestT.y - me.y;
+    const len = Math.hypot(ax, ay) || 1;
+    ax /= len; ay /= len;
+  } else {
+    ax = me.face; ay = 0;
+  }
+  const SPEED = 620;
+  arrows.push({ x: me.x + ax*26, y: me.y + ay*26, vx: ax*SPEED, vy: ay*SPEED,
+                ang: Math.atan2(ay, ax), life: 1.6 });
+  SFX.swoosh();
+}
+document.getElementById('shootBtn').addEventListener('pointerdown', (e) => {
+  e.preventDefault(); ensureAudio(); shoot();
+});
+
+/* ==================================================================== *
+ * Update
+ * ==================================================================== */
+function updateMe(dt){
+  const MAX = me.boost > 0 ? 430 : 265;
+  let dx = 0, dy = 0;
+  const kv = keyVector();
+  if(kv.dx || kv.dy){
+    const len = Math.hypot(kv.dx, kv.dy);
+    dx = kv.dx/len; dy = kv.dy/len;
+  } else if(swimTarget){
+    const tx = swimTarget.x - me.x, ty = swimTarget.y - me.y;
+    const len = Math.hypot(tx, ty);
+    if(len > 18){ dx = tx/len; dy = ty/len; }
+  }
+  me.vx = approach(me.vx, dx*MAX, dx || dy ? 7 : 3.2, dt);
+  me.vy = approach(me.vy, dy*MAX, dx || dy ? 7 : 3.2, dt);
+  me.x = clamp(me.x + me.vx*dt, MARGIN, WORLD_W - MARGIN);
+  me.y = clamp(me.y + me.vy*dt, MARGIN, FLOOR + 40);
+
+  const speed = Math.hypot(me.vx, me.vy);
+  me.tail += dt * (3 + speed*0.035);
+  if(Math.abs(me.vx) > 12) me.face = me.vx > 0 ? 1 : -1;
+
+  if(me.spin > 0)      me.spin = Math.max(0, me.spin - dt * 7);
+  if(me.invuln > 0)    me.invuln -= dt;
+  if(me.warpCool > 0)  me.warpCool -= dt;
+  if(me.shootCool > 0) me.shootCool -= dt;
+  if(me.boost > 0){
+    me.boost -= dt;
+    if(Math.random() < dt*30) parts.push({ x: me.x - me.face*24, y: me.y + rand(-10,10),
+      vx: -me.face*rand(20,70), vy: rand(-40,-10), life: 0.6, max: 0.6, color:'#d9f6ff', size: rand(3,7) });
+  }
+  if(speed > 150 && Math.random() < dt*14){
+    parts.push({ x: me.x - me.face*20, y: me.y + rand(-12,12), vx: rand(-20,20), vy: rand(-50,-15),
+                 life: 0.7, max: 0.7, color:'#fff0b8', size: rand(2,5) });
+  }
+
+  // Tunnels
+  if(me.warpCool <= 0){
+    for(let i = 0; i < tunnels.length; i++){
+      const t = tunnels[i];
+      if(dist2(me.x, me.y, t.x, t.y) < 46*46){
+        const p = tunnels[t.partner];
+        burst(t.x, t.y, 20, '#e0c3ff', { rise:true });
+        me.x = p.x; me.y = p.y;
+        me.warpCool = 1.6; me.invuln = Math.max(me.invuln, 1.0); me.boost = Math.max(me.boost, 1.2);
+        cam.x = clamp(me.x - vw/2, 0, Math.max(0, WORLD_W - vw));
+        cam.y = clamp(me.y - vh/2, 0, Math.max(0, WORLD_H - vh));
+        burst(me.x, me.y, 24, '#bde9ff', { rise:true });
+        SFX.warp();
+        tunnelsUsed++;
+        if(tunnelsUsed >= 3) award('tunnel');
+        break;
+      }
+    }
+  }
+}
+
+function updateShells(dt){
+  for(let i = shells.length - 1; i >= 0; i--){
+    const s = shells[i];
+    s.ph += dt * 2;
+    if(s.loose){
+      s.vy += 220 * dt;                       // dropped shells settle down to the sand
+      s.x = clamp(s.x + s.vx*dt, MARGIN, WORLD_W - MARGIN);
+      s.y = clamp(s.y + s.vy*dt, MARGIN, FLOOR);
+      s.vx = approach(s.vx, 0, 2.4, dt);
+      if(s.y >= FLOOR){ s.vy = 0; s.loose = false; }
+    }
+    if(dist2(s.x, s.y, me.x, me.y) < 34*34){
+      shells.splice(i, 1);
+      addShell(1);
+      SFX.chime();
+      burst(s.x, s.y, 8, '#ffe9a8', { rise:true, slow:true, size:4 });
+    }
+  }
+  // Top the ocean back up so it never runs dry.
+  if(shells.length < TARGET_SHELLS && Math.random() < dt * 1.4){
+    const p = spawnPoint(360);
+    shells.push(newShell(p.x, p.y, false));
+  }
+}
+
+function updateBags(dt){
+  for(let i = bags.length - 1; i >= 0; i--){
+    const b = bags[i];
+    b.ph += dt * 2.4;
+    if(b.stun > 0) b.stun -= dt;
+    if(b.flash > 0) b.flash -= dt;
+
+    // Wander
+    b.turn -= dt;
+    if(b.turn <= 0){ b.dir = rand(0, Math.PI*2); b.turn = rand(1.4, 3.2); }
+    const sp = b.stun > 0 ? 12 : 66;
+    b.vx = approach(b.vx, Math.cos(b.dir)*sp, 2, dt);
+    b.vy = approach(b.vy, Math.sin(b.dir)*sp*0.6, 2, dt);
+    b.x += b.vx*dt; b.y += b.vy*dt;
+    if(b.x < MARGIN || b.x > WORLD_W-MARGIN){ b.dir = Math.PI - b.dir; b.x = clamp(b.x, MARGIN, WORLD_W-MARGIN); }
+    if(b.y < MARGIN || b.y > FLOOR)         { b.dir = -b.dir;          b.y = clamp(b.y, MARGIN, FLOOR); }
+
+    // Throw a chocolate chip
+    b.cool -= dt;
+    if(b.stun <= 0 && b.cool <= 0 && dist2(b.x, b.y, me.x, me.y) < 430*430){
+      b.cool = rand(1.5, 2.2);
+      const dx = me.x - b.x, dy = me.y - b.y, len = Math.hypot(dx, dy) || 1;
+      chips.push({ x: b.x, y: b.y, vx: dx/len*195, vy: dy/len*195, life: 5, ph: rand(0,6.28) });
+    }
+  }
+}
+
+function updateCats(dt){
+  cats.forEach(c => {
+    c.ph += dt * 5;
+    if(c.flee > 0){
+      c.flee -= dt;
+      const dx = c.x - me.x, dy = c.y - me.y, len = Math.hypot(dx, dy) || 1;
+      c.vx = approach(c.vx, dx/len*220, 3, dt);
+      c.vy = approach(c.vy, dy/len*220, 3, dt);
+      if(c.flee <= 0 && c.shot){ c.shot = false; const p = spawnPoint(560); c.x = p.x; c.y = p.y; c.vx = c.vy = 0; }
+    } else {
+      const dx = me.x - c.x, dy = me.y - c.y, len = Math.hypot(dx, dy) || 1;
+      c.vx = approach(c.vx, dx/len*112, 1.6, dt);
+      c.vy = approach(c.vy, dy/len*112, 1.6, dt);
+      if(dist2(c.x, c.y, me.x, me.y) < 34*34){
+        bonk(c.x, c.y);
+        c.flee = 1.4;              // scurry off instead of riding on her head
+      }
+    }
+    c.x = clamp(c.x + c.vx*dt, MARGIN, WORLD_W-MARGIN);
+    c.y = clamp(c.y + c.vy*dt, MARGIN, FLOOR);
+    if(Math.abs(c.vx) > 8) c.face = c.vx > 0 ? 1 : -1;
+  });
+}
+
+function updateArrows(dt){
+  for(let i = arrows.length - 1; i >= 0; i--){
+    const a = arrows[i];
+    a.life -= dt;
+    a.x += a.vx*dt; a.y += a.vy*dt;
+    if(a.life <= 0 || a.x < 0 || a.x > WORLD_W || a.y < 0 || a.y > WORLD_H){ arrows.splice(i,1); continue; }
+
+    let hit = false;
+    for(let j = bags.length - 1; j >= 0; j--){
+      const b = bags[j];
+      if(dist2(a.x, a.y, b.x, b.y) < 36*36){
+        hit = true;
+        b.hp--; b.flash = 0.25;
+        burst(a.x, a.y, 6, '#c98a52', { slow:true });
+        if(b.hp <= 0){
+          SFX.poof();
+          burst(b.x, b.y, 20, '#c98a52');
+          burst(b.x, b.y, 8, '#5b3a22', { slow:true, size:6 });
+          for(let k = 0; k < 2; k++) shells.push(newShell(b.x + rand(-24,24), b.y + rand(-18,18), true));
+          bags.splice(j, 1);
+          bagsPopped++;
+          if(bagsPopped >= 5) award('popper');
+          setTimeout(() => { if(playing && bags.length < BAG_COUNT) bags.push(newBag()); }, 3200);
+        } else {
+          SFX.pop();
+        }
+        break;
+      }
+    }
+    if(!hit){
+      for(let j = 0; j < cats.length; j++){
+        const c = cats[j];
+        if(c.flee <= 0 && dist2(a.x, a.y, c.x, c.y) < 34*34){
+          hit = true;
+          c.flee = 3.2;
+          c.shot = true;
+          SFX.tumble();
+          burst(c.x, c.y, 10, '#ffd9a8', { slow:true });
+          break;
+        }
+      }
+    }
+    if(hit) arrows.splice(i, 1);
+  }
+}
+
+function updateChips(dt){
+  for(let i = chips.length - 1; i >= 0; i--){
+    const c = chips[i];
+    c.life -= dt; c.ph += dt*8;
+    c.x += c.vx*dt; c.y += c.vy*dt;
+    if(c.life <= 0 || c.x < 0 || c.x > WORLD_W || c.y < 0 || c.y > WORLD_H){ chips.splice(i,1); continue; }
+    // The dolphin bats chips away before they reach you.
+    if(dist2(c.x, c.y, dolphin.x, dolphin.y) < 58*58){
+      burst(c.x, c.y, 8, '#b58cff', { slow:true });
+      SFX.pop();
+      chips.splice(i, 1);
+      continue;
+    }
+    if(me.invuln <= 0 && dist2(c.x, c.y, me.x, me.y) < 30*30){
+      bonk(c.x, c.y);
+      chips.splice(i, 1);
+    }
+  }
+}
+
+/* The pickle is entirely hands-off: it goes after cookie bags on its own
+   and squirts pickle juice at them, exactly as the game was described. */
+function updatePickle(dt){
+  pickle.ph += dt * 3;
+  let target = null, bestD = Infinity;
+  bags.forEach(b => { const d = dist2(pickle.x, pickle.y, b.x, b.y); if(d < bestD){ bestD = d; target = b; } });
+  pickle.target = target;
+  if(target){
+    const dx = target.x - pickle.x, dy = target.y - pickle.y, len = Math.hypot(dx, dy) || 1;
+    const want = len > 190 ? 100 : -30;                 // close in, then hold at squirting distance
+    pickle.vx = approach(pickle.vx, dx/len*want, 1.8, dt);
+    pickle.vy = approach(pickle.vy, dy/len*want, 1.8, dt);
+    pickle.cool -= dt;
+    if(pickle.cool <= 0 && len < 300){
+      pickle.cool = rand(2.0, 2.8);
+      for(let i = 0; i < 3; i++){
+        const spread = rand(-0.14, 0.14);
+        const ang = Math.atan2(dy, dx) + spread;
+        juice.push({ x: pickle.x + Math.cos(ang)*22, y: pickle.y + Math.sin(ang)*22,
+                     vx: Math.cos(ang)*300, vy: Math.sin(ang)*300, life: 1.6 });
+      }
+      SFX.squirt();
+    }
+  } else {
+    pickle.vx = approach(pickle.vx, 0, 1.4, dt);
+    pickle.vy = approach(pickle.vy, 0, 1.4, dt);
+  }
+  pickle.x = clamp(pickle.x + pickle.vx*dt, MARGIN, WORLD_W-MARGIN);
+  pickle.y = clamp(pickle.y + pickle.vy*dt, MARGIN, FLOOR);
+
+  for(let i = juice.length - 1; i >= 0; i--){
+    const j = juice[i];
+    j.life -= dt; j.x += j.vx*dt; j.y += j.vy*dt;
+    if(j.life <= 0){ juice.splice(i,1); continue; }
+    let done = false;
+    for(let k = 0; k < bags.length; k++){
+      const b = bags[k];
+      if(dist2(j.x, j.y, b.x, b.y) < 34*34){
+        b.stun = 3.2;
+        burst(j.x, j.y, 7, '#9bdc4f', { slow:true });
+        award('pickle');
+        done = true;
+        break;
+      }
+    }
+    if(done) juice.splice(i, 1);
+  }
+}
+
+/* The purple dolphin: fetches shells, bumps chips away (above), and hands
+   out speed boosts. It always wants to be right beside you. */
+function updateDolphin(dt){
+  dolphin.ph += dt * 4;
+  if(dolphin.flip > 0) dolphin.flip = Math.max(0, dolphin.flip - dt*1.4);
+
+  // Go fetch a shell now and then; otherwise stay at the mermaid's shoulder.
+  // The radius and the cooldown are deliberately stingy — collecting shells is
+  // the player's job, and an unlimited dolphin vacuums the whole ocean.
+  if(dolphin.fetchCool > 0) dolphin.fetchCool -= dt;
+  let goal = null, bestD = 210*210;
+  if(dolphin.fetchCool <= 0){
+    for(let i = 0; i < shells.length; i++){
+      const s = shells[i];
+      const d = dist2(s.x, s.y, dolphin.x, dolphin.y);
+      if(d < bestD && dist2(s.x, s.y, me.x, me.y) > 150*150){ bestD = d; goal = s; }
+    }
+  }
+  const tx = goal ? goal.x : me.x - me.face*86;
+  const ty = goal ? goal.y : me.y + 46;
+  const dx = tx - dolphin.x, dy = ty - dolphin.y, len = Math.hypot(dx, dy) || 1;
+  const sp = Math.min(330, len * 3.2);
+  dolphin.vx = approach(dolphin.vx, dx/len*sp, 4, dt);
+  dolphin.vy = approach(dolphin.vy, dy/len*sp, 4, dt);
+  dolphin.x = clamp(dolphin.x + dolphin.vx*dt, MARGIN, WORLD_W-MARGIN);
+  dolphin.y = clamp(dolphin.y + dolphin.vy*dt, MARGIN, FLOOR);
+  if(Math.abs(dolphin.vx) > 10) dolphin.face = dolphin.vx > 0 ? 1 : -1;
+
+  if(goal && dist2(goal.x, goal.y, dolphin.x, dolphin.y) < 40*40){
+    const idx = shells.indexOf(goal);
+    if(idx >= 0){
+      shells.splice(idx, 1);
+      addShell(1);
+      SFX.chirp();
+      burst(goal.x, goal.y, 8, '#c7a8ff', { rise:true, slow:true, size:4 });
+      dolphin.brought++;
+      dolphin.fetchCool = 4.5;
+      if(dolphin.brought >= 5) award('dolphin');
+    }
+  }
+
+  dolphin.boostCool -= dt;
+  if(dolphin.boostCool <= 0 && dist2(dolphin.x, dolphin.y, me.x, me.y) < 200*200){
+    dolphin.boostCool = 12;
+    me.boost = Math.max(me.boost, 2.6);
+    dolphin.flip = 1;
+    SFX.chirp();
+    burst(me.x, me.y, 14, '#c7f0ff', { rise:true, slow:true });
+  }
+}
+
+function updateFish(dt){
+  for(let i = 0; i < fish.length; i++){
+    const f = fish[i];
+    f.ph += dt * 2;
+    f.x += f.dir * f.sp * dt;
+    f.y += Math.sin(f.ph) * 6 * dt;
+    if(f.x < -80)          f.x = WORLD_W + 80;
+    if(f.x > WORLD_W + 80) f.x = -80;
+  }
+}
+
+function updateParts(dt){
+  for(let i = parts.length - 1; i >= 0; i--){
+    const p = parts[i];
+    p.life -= dt;
+    if(p.life <= 0){ parts.splice(i,1); continue; }
+    p.x += p.vx*dt; p.y += p.vy*dt;
+    p.vx = approach(p.vx, 0, 2.2, dt);
+    p.vy = approach(p.vy, -30, 2.2, dt);   // everything drifts up, we're underwater
+  }
+}
+
+function updateCamera(dt){
+  const tx = WORLD_W <= vw ? (WORLD_W - vw)/2 : clamp(me.x - vw/2, 0, WORLD_W - vw);
+  const ty = WORLD_H <= vh ? (WORLD_H - vh)/2 : clamp(me.y - vh/2, 0, WORLD_H - vh);
+  cam.x = approach(cam.x, tx, 6, dt);
+  cam.y = approach(cam.y, ty, 6, dt);
+}
+
+/* ==================================================================== *
+ * Drawing — background layers, then the world, then the HUD bits.
+ * ==================================================================== */
+function drawBackground(T){
+  const g = ctx;
+  const grad = g.createLinearGradient(0, -cam.y, 0, WORLD_H - cam.y);
+  grad.addColorStop(0,    '#a8ecf1');
+  grad.addColorStop(0.28, '#43b0d2');
+  grad.addColorStop(0.62, '#12639b');
+  grad.addColorStop(1,    '#062a52');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, vw, vh);
+
+  // Sun rays slanting down from the surface (parallax 0.3)
+  g.save();
+  g.globalAlpha = 0.13;
+  g.fillStyle = '#ffffff';
+  const rayShift = -cam.x * 0.3;
+  for(let i = 0; i < 7; i++){
+    const bx = ((i*340 + rayShift + Math.sin(T*0.25 + i)*22) % (vw + 700)) - 350;
+    g.beginPath();
+    g.moveTo(bx, -20);
+    g.lineTo(bx + 74, -20);
+    g.lineTo(bx + 250, vh + 20);
+    g.lineTo(bx + 110, vh + 20);
+    g.closePath();
+    g.fill();
+  }
+  g.restore();
+
+  // Distant kelp silhouettes (parallax 0.55)
+  g.save();
+  g.globalAlpha = 0.30;
+  g.fillStyle = '#0b4b6e';
+  const fx = -cam.x * 0.55, fy = -cam.y * 0.55;
+  const baseY = FLOOR * 0.55 + fy + 90;
+  farKelp.forEach(k => {
+    const x = k.x * 0.55 + fx;
+    if(x < -60 || x > vw + 60) return;
+    const sway = Math.sin(T*0.7 + k.ph) * 16;
+    g.beginPath();
+    g.moveTo(x - k.w/2, baseY);
+    g.quadraticCurveTo(x + sway, baseY - k.h*0.6, x + sway*1.4, baseY - k.h);
+    g.quadraticCurveTo(x + sway + k.w, baseY - k.h*0.6, x + k.w/2, baseY);
+    g.closePath();
+    g.fill();
+  });
+  g.restore();
+
+  drawBubbleTile(farBubbles, 0.35, 0.16, T);
+}
+
+function drawBubbleTile(list, f, alpha, T){
+  const g = ctx, TILE = 600;
+  g.save();
+  g.globalAlpha = alpha;
+  g.fillStyle = '#ffffff';
+  const ox = ((-cam.x*f) % TILE + TILE) % TILE;
+  const oy = ((-cam.y*f) % TILE + TILE) % TILE;
+  const cols = Math.ceil(vw/TILE) + 1, rows = Math.ceil(vh/TILE) + 1;
+  for(let i = -1; i < cols; i++){
+    for(let j = -1; j < rows; j++){
+      const tx = ox + i*TILE, ty = oy + j*TILE;
+      for(let b = 0; b < list.length; b++){
+        const bb = list[b];
+        let by = (bb.y - T*bb.sp) % TILE;
+        if(by < 0) by += TILE;
+        g.beginPath();
+        g.arc(tx + bb.x, ty + by, bb.r, 0, 6.283);
+        g.fill();
+      }
+    }
+  }
+  g.restore();
+}
+
+function drawFloor(T){
+  const g = ctx;
+  g.fillStyle = '#e8d29a';
+  g.beginPath();
+  g.moveTo(-40, WORLD_H + 60);
+  g.lineTo(-40, FLOOR + 26);
+  for(let x = -40; x <= WORLD_W + 40; x += 120){
+    g.quadraticCurveTo(x + 60, FLOOR + 26 + Math.sin(x*0.01)*22, x + 120, FLOOR + 26);
+  }
+  g.lineTo(WORLD_W + 40, WORLD_H + 60);
+  g.closePath();
+  g.fill();
+
+  g.save();
+  g.globalAlpha = 0.55;
+  kelp.forEach(k => {
+    const sway = Math.sin(T*1.1 + k.ph) * 22;
+    g.strokeStyle = 'hsl(' + k.hue + ',55%,34%)';
+    g.lineWidth = k.w;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(k.x, FLOOR + 20);
+    g.quadraticCurveTo(k.x + sway*0.5, FLOOR + 20 - k.h*0.55, k.x + sway, FLOOR + 20 - k.h);
+    g.stroke();
+  });
+  g.restore();
+
+  corals.forEach(c => {
+    drawEmoji(g, c.ch, c.x, c.y + Math.sin(T*1.2 + c.ph)*3, c.size, { alpha: 0.92 });
+  });
+}
+
+function drawTunnel(g, t, T){
+  const pulse = 0.5 + 0.5*Math.sin(T*2 + t.ph);
+  g.save();
+  g.translate(t.x, t.y);
+  g.fillStyle = '#3f5871';
+  g.beginPath(); g.ellipse(0, 0, 58, 64, 0, 0, 6.283); g.fill();
+  g.fillStyle = '#5b768f';
+  g.beginPath(); g.ellipse(0, -4, 52, 58, 0, 0, 6.283); g.fill();
+
+  const mouth = g.createRadialGradient(0, 0, 4, 0, 0, 44);
+  mouth.addColorStop(0, 'hsla(' + t.hue + ',95%,' + (76 + pulse*14) + '%,1)');
+  mouth.addColorStop(0.6, 'hsla(' + t.hue + ',85%,' + (48 + pulse*10) + '%,.95)');
+  mouth.addColorStop(1, 'hsla(' + t.hue + ',70%,22%,.9)');
+  g.fillStyle = mouth;
+  g.beginPath(); g.ellipse(0, 0, 38, 44, 0, 0, 6.283); g.fill();
+
+  // swirl inside the mouth
+  g.save();
+  g.rotate(T * 1.1 + t.ph);
+  g.globalAlpha = 0.55;
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 3;
+  g.beginPath();
+  for(let a = 0; a < 8; a += 0.12){
+    const r = 4 + a * 4.2;
+    const px = Math.cos(a)*r, py = Math.sin(a)*r*1.12;
+    if(a === 0) g.moveTo(px, py); else g.lineTo(px, py);
+  }
+  g.stroke();
+  g.restore();
+  g.restore();
+}
+
+const MANE = ['#ff8fb1','#ffb74d','#ffe066','#7fe6a5','#67d3ff','#b388ff'];
+const FORELOCK = ['#ff8fb1','#ffe066','#67d3ff'];
+
+/* The star of the show. Everyone else is an emoji; the mermaid unicorn is
+   drawn by hand so she looks like the character she is. */
+function drawMermicorn(g, T){
+  g.save();
+  g.translate(me.x, me.y);
+  g.rotate(clamp(me.vy * 0.0016, -0.32, 0.32) * me.face + me.spin);
+  if(me.face < 0) g.scale(-1, 1);
+  g.scale(0.92, 0.92);
+  if(me.invuln > 0) g.globalAlpha = 0.5 + 0.5*Math.abs(Math.sin(T*20));
+
+  const flap = Math.sin(me.tail);
+
+  /* tail */
+  g.save();
+  g.translate(-14, 3);
+  g.rotate(flap * 0.28);
+  const tg = g.createLinearGradient(-56, 0, 6, 0);
+  tg.addColorStop(0,    '#9a6bff');
+  tg.addColorStop(0.55, '#4fc3e8');
+  tg.addColorStop(1,    '#7fe6d2');
+  g.fillStyle = tg;
+  g.beginPath();
+  g.moveTo(6, -14);
+  g.bezierCurveTo(-14, -17, -26, -13, -33, -5);
+  g.bezierCurveTo(-46, -32, -60, -27, -55, -8);
+  g.bezierCurveTo(-51, -2, -51, 2, -55, 8);
+  g.bezierCurveTo(-60, 27, -46, 32, -33, 5);
+  g.bezierCurveTo(-26, 13, -14, 17, 6, 14);
+  g.closePath();
+  g.fill();
+  g.globalAlpha *= 0.4;
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 1.6;
+  for(let c = 0; c < 3; c++){
+    for(let r = 0; r < 3; r++){
+      g.beginPath();
+      g.arc(-4 - c*10, -9 + r*8 + (c % 2)*4, 4.4, Math.PI*0.12, Math.PI*0.88);
+      g.stroke();
+    }
+  }
+  g.restore();
+
+  /* body */
+  const bg = g.createLinearGradient(0, -18, 0, 17);
+  bg.addColorStop(0, '#ffffff');
+  bg.addColorStop(1, '#ffdcef');
+  g.fillStyle = bg;
+  g.beginPath();
+  g.ellipse(-1, 0, 26, 15, -0.10, 0, 6.283);
+  g.fill();
+
+  /* front flipper-arm */
+  g.fillStyle = '#ffd0e8';
+  g.beginPath();
+  g.ellipse(6, 14, 13, 6, 0.42, 0, 6.283);
+  g.fill();
+
+  /* neck and unicorn head */
+  g.fillStyle = bg;
+  g.beginPath();
+  g.moveTo(1, -13);
+  g.quadraticCurveTo(9, -21, 13, -31);      // back of the neck
+  g.quadraticCurveTo(17, -45, 32, -45);     // over the top of the skull
+  g.quadraticCurveTo(45, -45, 48, -35);     // forehead
+  g.quadraticCurveTo(51, -25, 43, -22);     // nose
+  g.quadraticCurveTo(35, -20, 29, -24);     // jaw
+  g.quadraticCurveTo(26, -14, 22, -3);      // throat, down into the chest
+  g.closePath();
+  g.fill();
+
+  /* rainbow mane — drawn before the ears so it falls behind them */
+  g.lineCap = 'round';
+  MANE.forEach((col, i) => {
+    const w = Math.sin(T*3 + i*0.7) * 3.5;
+    g.strokeStyle = col;
+    g.lineWidth = 5.5;
+    g.beginPath();
+    g.moveTo(27 - i*2.2, -45 + i*1.6);
+    g.quadraticCurveTo(6 - i*2 + w, -36 + i*1.2, -4 - i*3.2 + w*1.2, -10 - i*0.6);
+    g.stroke();
+  });
+
+  /* ears */
+  g.fillStyle = '#ffe6f4';
+  g.beginPath(); g.moveTo(22, -43); g.lineTo(19, -54); g.lineTo(29, -46); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(30, -46); g.lineTo(31, -57); g.lineTo(38, -47); g.closePath(); g.fill();
+
+  /* horn */
+  const hg = g.createLinearGradient(36, -48, 49, -74);
+  hg.addColorStop(0, '#ffe082'); hg.addColorStop(1, '#fff6cc');
+  g.fillStyle = hg;
+  g.beginPath();
+  g.moveTo(35, -47); g.lineTo(42, -46); g.lineTo(49, -74); g.closePath();
+  g.fill();
+  g.strokeStyle = '#e0a92a'; g.lineWidth = 1.4;
+  for(let i = 1; i <= 3; i++){
+    const q = i / 4;
+    g.beginPath();
+    g.moveTo(35 + (49-35)*q, -47 + (-74+47)*q);
+    g.lineTo(42 + (49-42)*q, -46 + (-74+46)*q);
+    g.stroke();
+  }
+
+  /* forelock, tumbling forward between the ears */
+  const fw = Math.sin(T*3.4) * 2.5;
+  FORELOCK.forEach((col, i) => {
+    g.strokeStyle = col;
+    g.lineWidth = 4;
+    g.beginPath();
+    g.moveTo(33 - i*2, -46);
+    g.quadraticCurveTo(42 + i*1.5 + fw, -44, 44 + i*2 + fw, -35 + i*2);
+    g.stroke();
+  });
+
+  /* face */
+  g.fillStyle = '#41355c';
+  g.beginPath(); g.ellipse(36, -35, 2.7, 3.3, 0, 0, 6.283); g.fill();
+  g.fillStyle = '#ffffff';
+  g.beginPath(); g.arc(37, -36.3, 1.1, 0, 6.283); g.fill();
+  g.fillStyle = '#e5a8c6';
+  g.beginPath(); g.ellipse(46, -26.5, 1.7, 1.3, 0, 0, 6.283); g.fill();
+  g.fillStyle = 'rgba(255,143,177,.5)';
+  g.beginPath(); g.ellipse(31, -28, 4, 2.6, 0, 0, 6.283); g.fill();
+
+  g.restore();
+}
+
+function drawWorld(T){
+  const g = ctx;
+  g.save();
+  g.translate(-cam.x, -cam.y);
+
+  drawFloor(T);
+
+  fish.forEach(f => {
+    drawEmoji(g, f.ch, f.x, f.y + Math.sin(f.ph)*4, f.size, {
+      flip: f.dir > 0 ? -1 : 1, alpha: 0.75, rot: Math.sin(f.ph)*0.12
+    });
+  });
+
+  tunnels.forEach(t => drawTunnel(g, t, T));
+
+  shells.forEach(s => {
+    drawEmoji(g, '🐚', s.x, s.y + Math.sin(s.ph)*3, 30, { rot: Math.sin(s.ph*0.5)*0.15 });
+  });
+
+  // particles
+  parts.forEach(p => {
+    const a = clamp(p.life / p.max, 0, 1);
+    if(p.ch){ drawEmoji(g, p.ch, p.x, p.y, p.size*3, { alpha: a }); }
+    else {
+      g.globalAlpha = a;
+      g.fillStyle = p.color;
+      g.beginPath(); g.arc(p.x, p.y, p.size, 0, 6.283); g.fill();
+      g.globalAlpha = 1;
+    }
+  });
+
+  // pickle juice
+  g.fillStyle = '#9bdc4f';
+  juice.forEach(j => {
+    g.save();
+    g.translate(j.x, j.y);
+    g.rotate(Math.atan2(j.vy, j.vx));
+    g.beginPath(); g.ellipse(0, 0, 9, 4.5, 0, 0, 6.283); g.fill();
+    g.restore();
+  });
+
+  chips.forEach(c => drawEmoji(g, '🍫', c.x, c.y, 26, { rot: c.ph*0.6 }));
+  arrows.forEach(a => drawEmoji(g, '🏹', a.x, a.y, 30, { rot: a.ang }));
+
+  bags.forEach(b => {
+    const bob = Math.sin(b.ph)*4;
+    if(b.stun > 0){
+      g.save(); g.globalAlpha = 0.5;
+      g.fillStyle = '#9bdc4f';
+      g.beginPath(); g.arc(b.x, b.y + bob, 30, 0, 6.283); g.fill();
+      g.restore();
+    }
+    drawEmoji(g, '🍪', b.x, b.y + bob, 46, {
+      rot: Math.sin(b.ph*0.6)*0.12,
+      alpha: b.flash > 0 ? 0.45 : 1,
+      filter: b.stun > 0 ? 'hue-rotate(70deg) saturate(1.5)' : null
+    });
+    if(b.hp === 1){
+      drawEmoji(g, '💢', b.x + 20, b.y + bob - 24, 20, { alpha: 0.9 });
+    }
+    if(b.stun > 0) drawEmoji(g, '💫', b.x, b.y + bob - 34, 22, { rot: b.ph });
+  });
+
+  cats.forEach(c => {
+    const bob = Math.sin(c.ph*0.5)*3;
+    drawEmoji(g, c.shot ? '🙀' : '😼', c.x, c.y + bob, 40, {
+      flip: c.face, rot: c.shot ? c.ph : Math.sin(c.ph*0.4)*0.1
+    });
+    drawEmoji(g, '🥽', c.x + c.face*4, c.y + bob - 8, 20, { flip: c.face, alpha: 0.85 });
+  });
+
+  drawEmoji(g, '🥒', pickle.x, pickle.y + Math.sin(pickle.ph)*4, 44, {
+    rot: Math.atan2(pickle.vy, pickle.vx) * 0.4 + Math.sin(pickle.ph*0.7)*0.1
+  });
+
+  // purple dolphin
+  const dRot = dolphin.flip > 0 ? (1 - dolphin.flip) * Math.PI * 2 : Math.sin(dolphin.ph*0.5)*0.14;
+  if(!canFilter){
+    g.save();
+    g.globalAlpha = 0.5;
+    const dg = g.createRadialGradient(dolphin.x, dolphin.y, 4, dolphin.x, dolphin.y, 42);
+    dg.addColorStop(0, 'rgba(179,136,255,.9)');
+    dg.addColorStop(1, 'rgba(179,136,255,0)');
+    g.fillStyle = dg;
+    g.beginPath(); g.arc(dolphin.x, dolphin.y, 42, 0, 6.283); g.fill();
+    g.restore();
+  }
+  drawEmoji(g, '🐬', dolphin.x, dolphin.y + Math.sin(dolphin.ph)*3, 48, {
+    flip: dolphin.face, rot: dRot,
+    filter: 'hue-rotate(58deg) saturate(1.35) brightness(1.05)'
+  });
+
+  drawMermicorn(g, T);
+
+  g.restore();
+}
+
+function drawMinimap(){
+  const g = ctx;
+  const w = 116, h = Math.round(w * WORLD_H / WORLD_W);
+  const x = 14, y = vh - h - 18;
+  const sx = w / WORLD_W, sy = h / WORLD_H;
+  g.save();
+  g.globalAlpha = 0.82;
+  g.fillStyle = 'rgba(255,253,247,.86)';
+  g.strokeStyle = 'rgba(65,53,92,.35)';
+  g.lineWidth = 2;
+  if(g.roundRect){ g.beginPath(); g.roundRect(x, y, w, h, 12); g.fill(); g.stroke(); }
+  else { g.fillRect(x, y, w, h); g.strokeRect(x, y, w, h); }
+  const dot = (wx, wy, r, col) => {
+    g.fillStyle = col;
+    g.beginPath(); g.arc(x + wx*sx, y + wy*sy, r, 0, 6.283); g.fill();
+  };
+  tunnels.forEach(t => dot(t.x, t.y, 3.4, '#b388ff'));
+  bags.forEach(b => dot(b.x, b.y, 2.8, '#8a5a30'));
+  dot(dolphin.x, dolphin.y, 2.6, '#7e5bd6');
+  dot(me.x, me.y, 4, '#ff5a92');
+  g.restore();
+}
+
+/* ==================================================================== *
+ * Loop
+ * ==================================================================== */
+let playing = false, rafId = 0, lastT = 0, T = 0;
+
+function update(dt){
+  updateMe(dt);
+  updateBags(dt);
+  updateCats(dt);
+  updateArrows(dt);
+  updateChips(dt);
+  updatePickle(dt);
+  updateDolphin(dt);
+  updateShells(dt);
+  updateFish(dt);
+  updateParts(dt);
+  updateCamera(dt);
+}
+
+function draw(T){
+  drawBackground(T);
+  drawWorld(T);
+  drawBubbleTile(nearBubbles, 1.25, 0.22, T);
+  drawMinimap();
+}
+
+function frame(now){
+  rafId = requestAnimationFrame(frame);
+  if(!lastT){ lastT = now; return; }
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  T += dt;
+  update(dt);
+  draw(T);
+}
+function startLoop(){ if(rafId) return; lastT = 0; rafId = requestAnimationFrame(frame); }
+function stopLoop(){ if(rafId){ cancelAnimationFrame(rafId); rafId = 0; } }
+
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ stopLoop(); stopSpeaking(); }
+  else if(playing) startLoop();
+});
+
+/* ==================================================================== *
+ * Screens and buttons
+ * ==================================================================== */
+const homeScreen = document.getElementById('home');
+
+function syncSoundButtons(){
+  const icon = soundOn ? '🔊' : '🔇';
+  document.getElementById('soundBtn').textContent = icon;
+  document.getElementById('soundBtnHome').textContent = icon;
+}
+function toggleSound(){
+  soundOn = !soundOn;
+  store.set('mo_sound', soundOn ? 'on' : 'off');
+  if(!soundOn) stopSpeaking();
+  syncSoundButtons();
+  if(soundOn){ ensureAudio(); SFX.pop(); }
+}
+document.getElementById('soundBtn').addEventListener('click', toggleSound);
+document.getElementById('soundBtnHome').addEventListener('click', toggleSound);
+
+function showHome(){
+  playing = false;
+  stopLoop();
+  stopSpeaking();
+  keys.clear();
+  swimTarget = null;
+  pointerId = null;
+  document.body.classList.remove('playing');
+  homeScreen.classList.add('active');
+  renderBest();
+}
+function renderBest(){
+  const line = document.getElementById('bestLine');
+  if(best > 0){
+    line.style.display = '';
+    line.textContent = '🏆 Most shells in one swim: ' + best;
+  } else {
+    line.style.display = 'none';
+  }
+}
+function startGame(){
+  ensureAudio();
+  resetWorld();
+  playing = true;
+  homeScreen.classList.remove('active');
+  document.body.classList.add('playing');
+  startLoop();
+  say(pick([
+    'Let us go swimming!',
+    'Splash! Time to find some shells!',
+    'Dive in, mermaid unicorn!'
+  ]));
+}
+document.getElementById('playBtn').addEventListener('click', startGame);
+document.getElementById('homeBtn').addEventListener('click', () => { SFX.pop(); showHome(); });
+
+renderBadges();
+renderBest();
+syncSoundButtons();
+</script>
+</body>
+</html>
