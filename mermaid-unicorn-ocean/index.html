@@ -1195,6 +1195,94 @@ function drawMermicorn(g, T){
   g.restore();
 }
 
+/* The purple dolphin. He used to be the 🐬 emoji recoloured with ctx.filter,
+   which older Safari doesn't support — so on an iPad he just showed up blue.
+   Drawing him by hand means he is purple on every device, no feature
+   detection involved. */
+function drawDolphin(g, T){
+  const bob = Math.sin(dolphin.ph) * 3;
+  g.save();
+  g.translate(dolphin.x, dolphin.y + bob);
+  g.rotate(dolphin.flip > 0 ? (1 - dolphin.flip) * Math.PI * 2 : Math.sin(dolphin.ph*0.5)*0.14);
+  if(dolphin.face < 0) g.scale(-1, 1);
+
+  // a soft magical aura so he reads as the helper
+  const aura = g.createRadialGradient(0, 0, 6, 0, 0, 46);
+  aura.addColorStop(0, 'rgba(190,150,255,.34)');
+  aura.addColorStop(1, 'rgba(190,150,255,0)');
+  g.fillStyle = aura;
+  g.beginPath(); g.arc(0, 0, 46, 0, 6.283); g.fill();
+
+  const body = g.createLinearGradient(0, -18, 0, 15);
+  body.addColorStop(0,    '#7b3fd4');
+  body.addColorStop(0.55, '#a678f5');
+  body.addColorStop(1,    '#e8d5ff');
+  const finCol = '#8552e0';
+
+  /* tail flukes, flapping */
+  const flap = Math.sin(dolphin.ph * 1.6);
+  g.save();
+  g.translate(-31, -4);
+  g.rotate(flap * 0.30);
+  g.fillStyle = finCol;
+  g.beginPath();
+  g.moveTo(5, 3);
+  g.quadraticCurveTo(-7, 1, -25, -5);
+  g.quadraticCurveTo(-13, 0, -12, 2);
+  g.quadraticCurveTo(-13, 4, -25, 10);
+  g.quadraticCurveTo(-7, 5, 5, 3);
+  g.closePath();
+  g.fill();
+  g.restore();
+
+  /* body */
+  g.fillStyle = body;
+  g.beginPath();
+  g.moveTo(39, 3);
+  g.quadraticCurveTo(32, -1, 27, -3);             // slim beak
+  g.quadraticCurveTo(24, -14, 13, -16);           // melon: a round forehead
+  g.bezierCurveTo(1, -18, -17, -14, -31, -4);     // back, down to the tail stock
+  g.bezierCurveTo(-22, 4, -11, 12, 3, 12);        // belly
+  g.quadraticCurveTo(15, 11, 23, 7);              // forward to the jaw
+  g.quadraticCurveTo(29, 6, 39, 3);               // underside of the beak
+  g.closePath();
+  g.fill();
+
+  /* dorsal fin, swept back */
+  g.fillStyle = finCol;
+  g.beginPath();
+  g.moveTo(-2, -17);
+  g.quadraticCurveTo(-8, -29, -19, -27);
+  g.quadraticCurveTo(-12, -20, -14, -14);
+  g.closePath();
+  g.fill();
+
+  /* pectoral fin */
+  g.beginPath();
+  g.moveTo(11, 8);
+  g.quadraticCurveTo(5, 15, -5, 18);
+  g.quadraticCurveTo(0, 11, 3, 7);
+  g.closePath();
+  g.fill();
+
+  /* face */
+  g.fillStyle = '#3b1c68';
+  g.beginPath(); g.arc(19, -7, 2.6, 0, 6.283); g.fill();
+  g.fillStyle = '#ffffff';
+  g.beginPath(); g.arc(20, -8, 1.1, 0, 6.283); g.fill();
+  g.fillStyle = 'rgba(59,28,104,.5)';
+  g.beginPath(); g.ellipse(8, -16.5, 1.8, 1.2, 0, 0, 6.283); g.fill();   // blowhole
+  g.strokeStyle = 'rgba(59,28,104,.45)';
+  g.lineWidth = 1.5;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(37, 4);
+  g.quadraticCurveTo(30, 6.5, 24, 6);              // smiling mouth line
+  g.stroke();
+
+  g.restore();
+}
+
 function drawWorld(T){
   const g = ctx;
   g.save();
@@ -1242,9 +1330,12 @@ function drawWorld(T){
   bags.forEach(b => {
     const bob = Math.sin(b.ph)*4;
     if(b.stun > 0){
-      g.save(); g.globalAlpha = 0.5;
-      g.fillStyle = '#9bdc4f';
-      g.beginPath(); g.arc(b.x, b.y + bob, 30, 0, 6.283); g.fill();
+      g.save(); g.globalAlpha = 0.72;
+      const sg = g.createRadialGradient(b.x, b.y + bob, 6, b.x, b.y + bob, 34);
+      sg.addColorStop(0, 'rgba(155,220,79,.95)');
+      sg.addColorStop(1, 'rgba(155,220,79,0)');
+      g.fillStyle = sg;
+      g.beginPath(); g.arc(b.x, b.y + bob, 34, 0, 6.283); g.fill();
       g.restore();
     }
     drawEmoji(g, '🍪', b.x, b.y + bob, 46, {
@@ -1270,22 +1361,7 @@ function drawWorld(T){
     rot: Math.atan2(pickle.vy, pickle.vx) * 0.4 + Math.sin(pickle.ph*0.7)*0.1
   });
 
-  // purple dolphin
-  const dRot = dolphin.flip > 0 ? (1 - dolphin.flip) * Math.PI * 2 : Math.sin(dolphin.ph*0.5)*0.14;
-  if(!canFilter){
-    g.save();
-    g.globalAlpha = 0.5;
-    const dg = g.createRadialGradient(dolphin.x, dolphin.y, 4, dolphin.x, dolphin.y, 42);
-    dg.addColorStop(0, 'rgba(179,136,255,.9)');
-    dg.addColorStop(1, 'rgba(179,136,255,0)');
-    g.fillStyle = dg;
-    g.beginPath(); g.arc(dolphin.x, dolphin.y, 42, 0, 6.283); g.fill();
-    g.restore();
-  }
-  drawEmoji(g, '🐬', dolphin.x, dolphin.y + Math.sin(dolphin.ph)*3, 48, {
-    flip: dolphin.face, rot: dRot,
-    filter: 'hue-rotate(58deg) saturate(1.35) brightness(1.05)'
-  });
+  drawDolphin(g, T);
 
   drawMermicorn(g, T);
 

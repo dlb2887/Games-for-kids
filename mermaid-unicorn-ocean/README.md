@@ -52,8 +52,11 @@ Everything worth tweaking sits near the top of the `<script>` block in `index.ht
 - `TARGET_SHELLS`, `BAG_COUNT`, `CAT_COUNT` — how crowded it is.
 - `MILESTONES`, `AIM_RANGE`, and the speeds inside each `update…()` function — the difficulty.
 
-The characters are emoji, except the mermaid unicorn herself, who is drawn with canvas paths
-in `drawMermicorn()` — that's where to go to change her colours, mane, or horn.
+Most characters are emoji. The two that aren't are drawn with canvas paths: the mermaid
+unicorn in `drawMermicorn()` (her colours, mane, and horn live there) and the purple dolphin
+in `drawDolphin()`. The dolphin is drawn rather than recoloured on purpose — tinting the 🐬
+emoji relies on canvas `ctx.filter`, which older Safari doesn't support, and on those devices
+he came out blue.
 
 ## Credits
 
