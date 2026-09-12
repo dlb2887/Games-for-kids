@@ -15,6 +15,7 @@ fully offline; a couple pull their frameworks from a CDN, so those need internet
 | 🐱 **Magical Kittens Reading** | [`kitten-reading/`](kitten-reading/) | A learn-to-read game for ages ~4: four superhero-kitten stories you read by sliding a finger across the words, a retelling game where you put a fairy tale back in order, and sight-word flash cards. |
 | 🦄 **Unicorn Spanish** | [`unicorn-spanish/`](unicorn-spanish/) | A first-Spanish game for ages ~4: count from uno to cien with three unicorns, and a memory game where every pair is an English card and its Spanish partner. |
 | 🧜‍♀️ **Mermaid Unicorn Ocean** | [`mermaid-unicorn-ocean/`](mermaid-unicorn-ocean/) | A just-for-fun swimming game: steer a mermaid unicorn around a scrolling ocean, collect shells, and shoot arrows at the bags of cookies. No lessons, no losing. |
+| 🔱 **Ariel and the Lost Voice** | [`ariel-lost-voice/`](ariel-lost-voice/) | A six-level story game: Ursula steals Ariel's voice and King Triton's trident, and Ariel can only speak Spanish until you work out what her words mean. Swimming levels, a walking level, the six sisters protecting Prince Eric, and a big clapping ending. |
 
 More games will be added as their own folders.
 
@@ -38,7 +39,10 @@ Games-for-kids/
 ├── unicorn-spanish/
 │   ├── index.html
 │   └── README.md
-└── mermaid-unicorn-ocean/
+├── mermaid-unicorn-ocean/
+│   ├── index.html
+│   └── README.md
+└── ariel-lost-voice/
     ├── index.html
     └── README.md
 ```

@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Ariel and the Lost Voice 🧜‍♀️🔱</title>
+<style>
+  :root{
+    --deep:#08234c; --sea1:#0d5c92; --sea2:#2fa3c9; --shallow:#9fe8ee; --sand:#f6e3b4;
+    --sky1:#bde8ff; --sky2:#ffe3c9;
+    --pink:#ff8fb1; --purple:#b388ff; --gold:#ffd54f; --green:#8bd45f; --evil:#7a3fb5;
+    --ink:#41355c; --card:#fffdf7;
+    --shadow:0 10px 0 rgba(0,0,0,.08), 0 18px 40px rgba(80,50,120,.18);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  /* several things below set display, which would otherwise beat [hidden] */
+  [hidden]{display:none !important;}
+  html,body{height:100%; margin:0;}
+  body{
+    font-family:'Comic Sans MS','Baloo 2','Trebuchet MS',system-ui,sans-serif;
+    color:var(--ink);
+    background:linear-gradient(180deg,var(--shallow) 0%, var(--sea2) 38%, var(--deep) 100%);
+    overflow:hidden; user-select:none; touch-action:none;
+  }
+
+  /* The playfield. Swim, walk and sister levels all draw into this one canvas. */
+  #stage{position:fixed; inset:0; width:100%; height:100%; display:none; z-index:1; touch-action:none;}
+  body.playing #stage{display:block;}
+
+  /* Top bar — same chrome as the other games in this collection */
+  .topbar{position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    align-items:center; padding:12px 16px; z-index:5; pointer-events:none;
+    padding-top:calc(12px + env(safe-area-inset-top)); gap:10px;}
+  .topbar > *{pointer-events:auto;}
+  .roundbtn{border:none; cursor:pointer; width:62px; height:62px; border-radius:50%;
+    background:var(--card); box-shadow:var(--shadow); font-size:28px; display:grid; place-items:center;
+    transition:transform .12s; font-family:inherit; flex:none; color:var(--ink);}
+  .roundbtn:active{transform:scale(.9);}
+  .badge{background:var(--card); box-shadow:var(--shadow); border-radius:30px; padding:8px 18px;
+    font-size:clamp(17px,4vw,24px); font-weight:bold; display:flex; align-items:center; gap:8px;
+    color:var(--ink); white-space:nowrap;}
+  #hud{display:none;}
+  body.playing #hud{display:block;}
+
+  /* Walking controls, only shown on the walking levels */
+  .padrow{position:fixed; left:0; right:0; bottom:calc(18px + env(safe-area-inset-bottom));
+    display:none; justify-content:space-between; padding:0 18px; z-index:5;}
+  body.walking .padrow{display:flex;}
+  .padrow .left{display:flex; gap:14px;}
+  .padbtn{width:84px; height:84px; font-size:38px;}
+  .jumpbtn{background:linear-gradient(180deg,#ffd9e6,#ffa8c8);}
+
+  /* Screens */
+  .screen{position:fixed; inset:0; z-index:4; display:none; flex-direction:column;
+    align-items:center; justify-content:flex-start;
+    text-align:center; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:linear-gradient(180deg,var(--shallow) 0%, var(--sea2) 38%, var(--deep) 100%);}
+  .screen.active{display:flex; animation:pop .4s ease both;}
+  .screen.land{background:linear-gradient(180deg,var(--sky1) 0%, var(--sky2) 55%, var(--sand) 100%);}
+  .screen.dark{background:linear-gradient(180deg,#3b1d63 0%, #1f1240 60%, #0a0620 100%);}
+  .sheet{margin:auto; display:flex; flex-direction:column; align-items:center; gap:16px;
+    width:100%; padding:calc(22px + env(safe-area-inset-top)) 18px calc(30px + env(safe-area-inset-bottom));}
+  @keyframes pop{from{opacity:0; transform:scale(.94) translateY(10px);}to{opacity:1; transform:none;}}
+
+  h1{font-size:clamp(28px,7vw,56px); margin:0; padding:0 4px; color:#fff; line-height:1.05;
+     text-shadow:0 3px 0 var(--pink), 0 6px 0 var(--purple), 0 10px 18px rgba(0,0,0,.25);
+     letter-spacing:1px;}
+  h2{font-size:clamp(22px,5.4vw,36px); margin:0; color:#fff;
+     text-shadow:0 3px 0 var(--pink), 0 6px 14px rgba(0,0,0,.2);}
+  .subtitle{font-size:clamp(15px,3.4vw,22px); color:#3b3363; background:#ffffffd9;
+     padding:8px 18px; border-radius:30px; box-shadow:var(--shadow); max-width:min(560px,92vw);}
+
+  .bigbtn{
+    border:none; cursor:pointer; color:#fff; font-family:inherit; font-weight:bold;
+    font-size:clamp(20px,4.6vw,30px); padding:20px 30px; border-radius:28px;
+    box-shadow:var(--shadow); display:flex; align-items:center; gap:14px; min-width:250px;
+    justify-content:center; transition:transform .12s ease, filter .12s ease;
+    background:linear-gradient(180deg,#ffa3c2,#ff6f9c);
+  }
+  .bigbtn:active{transform:translateY(4px) scale(.98); filter:brightness(1.06);}
+  .bigbtn.gold{background:linear-gradient(180deg,#ffe08a,#ffb43f); color:#5a3c00;}
+  .bigbtn .emoji{font-size:1.3em;}
+
+  .how{background:#ffffffe8; border-radius:28px; box-shadow:var(--shadow); padding:16px 20px;
+    max-width:min(560px,94vw); font-size:clamp(14px,3.2vw,18px); color:#4a3f70; line-height:1.55;}
+  .how b{color:#7b4bbd;}
+  .how .row{display:flex; align-items:center; gap:10px; text-align:left; margin:7px 0;}
+  .how .row .ic{font-size:1.6em; width:1.5em; flex:none; text-align:center;}
+
+  /* ---- Home: the level map ---- */
+  .map{display:flex; flex-wrap:wrap; gap:14px; justify-content:center; max-width:min(620px,96vw);}
+  .lvl{width:160px; border:none; font-family:inherit; cursor:pointer; color:var(--ink);
+    background:var(--card); border-radius:24px; box-shadow:var(--shadow); padding:14px 10px 16px;
+    display:flex; flex-direction:column; align-items:center; gap:4px; transition:transform .12s;}
+  .lvl:active{transform:scale(.96);}
+  .lvl .em{font-size:44px; line-height:1.1;}
+  .lvl .n{font-size:14px; font-weight:bold; color:#8a7bb0;}
+  .lvl .t{font-size:16px; font-weight:bold; line-height:1.2;}
+  .lvl .star{font-size:20px; height:24px;}
+  .lvl.locked{opacity:.55; filter:grayscale(.6);}
+
+  /* ---- Story screen ---- */
+  .cast{display:flex; align-items:flex-end; justify-content:center; gap:6px; min-height:120px;
+    font-size:clamp(48px,13vw,86px); line-height:1;}
+  .cast span{display:inline-block; animation:bob 2.2s ease-in-out infinite;}
+  .cast span:nth-child(2){animation-delay:.3s;}
+  .cast span:nth-child(3){animation-delay:.6s;}
+  .cast span:nth-child(4){animation-delay:.9s;}
+  .cast span.big{font-size:1.5em;}
+  @keyframes bob{0%,100%{transform:translateY(0) rotate(-2deg);}50%{transform:translateY(-12px) rotate(2deg);}}
+
+  .bubble{background:#fff; border-radius:26px; box-shadow:var(--shadow); padding:16px 22px;
+    max-width:min(560px,94vw); font-size:clamp(17px,4vw,24px); line-height:1.45; color:#4a3f70;}
+  .bubble .who{display:block; font-size:15px; font-weight:bold; color:#b07bd0; margin-bottom:4px;}
+  .bubble.es{background:#fff6ff; border:4px dashed var(--purple); color:#6a3fa0; font-style:italic;}
+  .bubble.es .mean{display:block; margin-top:10px; font-style:normal; font-size:.8em; color:#8a7bb0;}
+  .minirow{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .minibtn{border:none; font-family:inherit; cursor:pointer; background:var(--card); color:#6a5a93;
+    border-radius:24px; box-shadow:var(--shadow); padding:10px 18px; font-size:16px; font-weight:bold;}
+  .minibtn:active{transform:scale(.95);}
+
+  /* ---- Translate screen ---- */
+  .wordcard{background:#fff; border-radius:30px; box-shadow:var(--shadow); padding:20px 26px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; min-width:min(340px,90vw);}
+  .wordcard .es{font-size:clamp(34px,9vw,58px); font-weight:bold; color:#7b4bbd;}
+  .wordcard .sub{font-size:16px; color:#8a7bb0;}
+  .wordcard .clue{font-size:56px; height:64px; line-height:64px; opacity:0; transition:opacity .3s;}
+  .wordcard .clue.show{opacity:1; animation:bob 1.4s ease-in-out infinite;}
+  .choices{display:flex; flex-wrap:wrap; gap:12px; justify-content:center; max-width:min(560px,94vw);}
+  .choice{border:none; font-family:inherit; cursor:pointer; background:var(--card); color:var(--ink);
+    border-radius:26px; box-shadow:var(--shadow); padding:16px 20px; min-width:150px;
+    font-size:clamp(19px,4.4vw,26px); font-weight:bold; transition:transform .12s, opacity .3s;}
+  .choice:active{transform:scale(.96);}
+  .choice.gone{opacity:.25; pointer-events:none;}
+  .choice.right{background:#d6ffd9; box-shadow:0 0 0 6px #8bd45f inset, var(--shadow);}
+  .choice.wrong{animation:shake .4s;}
+  @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-9px);}75%{transform:translateX(9px);}}
+  .voicebar{display:flex; gap:6px; font-size:26px;}
+  .voicebar span{opacity:.25;}
+  .voicebar span.on{opacity:1; animation:pop .4s cubic-bezier(.34,1.56,.64,1) both;}
+
+  /* ---- Sister hug / clap finale ---- */
+  .hug{font-size:clamp(40px,11vw,74px); line-height:1.2; display:flex; flex-wrap:wrap;
+    justify-content:center; gap:2px;}
+  .hug span{display:inline-block; animation:squeeze 1.6s ease-in-out infinite;}
+  @keyframes squeeze{0%,100%{transform:translateX(0) scale(1);}50%{transform:translateX(0) scale(1.12);}}
+  .clapbtn{font-size:clamp(60px,16vw,110px); background:none; border:none; cursor:pointer;
+    filter:drop-shadow(0 10px 16px rgba(0,0,0,.25)); transition:transform .1s;}
+  .clapbtn:active{transform:scale(.85) rotate(-6deg);}
+  .claprow{display:flex; gap:10px; font-size:34px;}
+  .claprow span{opacity:.25;}
+  .claprow span.on{opacity:1; animation:pop .3s cubic-bezier(.34,1.56,.64,1) both;}
+
+  .homesound{position:fixed; top:calc(12px + env(safe-area-inset-top)); right:16px; z-index:6;}
+  /* keep the title clear of the floating speaker button */
+  #home h1{padding:0 72px;}
+  footer{font-size:13px; opacity:.9; color:#fff;}
+
+  /* Popup for badges and big moments */
+  #toast{position:fixed; left:0; right:0; top:calc(84px + env(safe-area-inset-top)); z-index:20;
+    display:flex; justify-content:center; pointer-events:none; padding:0 14px;}
+  #toast .inner{background:#fff; border-radius:26px; box-shadow:var(--shadow); padding:12px 20px;
+    display:none; align-items:center; gap:12px; border:4px solid var(--gold); max-width:94vw;}
+  #toast.show .inner{display:flex; animation:pop .4s cubic-bezier(.34,1.56,.64,1) both;}
+  #toast .em{font-size:38px; line-height:1;}
+  #toast .t1{font-weight:bold; color:#7b4bbd; font-size:18px;}
+  #toast .t2{color:#8a7bb0; font-size:14px;}
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div id="hud">
+  <div class="topbar">
+    <button class="roundbtn" id="homeBtn" data-testid="home" title="Back to the map">🏠</button>
+    <div class="badge" id="goalBadge">🐚 <span id="goalText">0 / 8</span></div>
+    <button class="roundbtn" id="soundBtn" data-testid="sound" title="Sound on and off">🔊</button>
+  </div>
+  <div class="padrow">
+    <div class="left">
+      <button class="roundbtn padbtn" id="leftBtn" data-testid="walk-left" title="Walk left">◀</button>
+      <button class="roundbtn padbtn" id="rightBtn" data-testid="walk-right" title="Walk right">▶</button>
+    </div>
+    <button class="roundbtn padbtn jumpbtn" id="jumpBtn" data-testid="jump" title="Jump">⤴</button>
+  </div>
+</div>
+
+<div id="toast"><div class="inner"><div class="em" id="toastEm">🐚</div>
+  <div><div class="t1" id="toastT1"></div><div class="t2" id="toastT2"></div></div></div></div>
+
+<!-- ============================ HOME ============================ -->
+<section class="screen active" id="home">
+  <button class="roundbtn homesound" id="soundBtnHome" data-testid="sound-home" title="Sound on and off">🔊</button>
+  <div class="sheet">
+    <h1>Ariel and the<br>Lost Voice</h1>
+    <div class="subtitle">Ursula took Ariel's voice. Find it, word by word. 🧜‍♀️🔱</div>
+    <div class="map" id="levelMap"></div>
+    <button class="bigbtn" id="playBtn" data-testid="play"><span class="emoji">▶️</span> Play</button>
+    <div class="how">
+      <div class="row"><span class="ic">🏊‍♀️</span><span><b>Some levels you swim.</b> Drag your finger where you want to go, or use the arrow keys.</span></div>
+      <div class="row"><span class="ic">🚶‍♀️</span><span><b>Some levels you walk.</b> Use the ◀ ▶ buttons and the ⤴ button to jump.</span></div>
+      <div class="row"><span class="ic">💬</span><span><b>Ariel talks in Spanish</b> while Ursula has her voice. Tap <b>🔍</b> to find out what she said.</span></div>
+      <div class="row"><span class="ic">💡</span><span><b>Stuck?</b> The light bulb always helps. Nobody can lose this game.</span></div>
+    </div>
+    <button class="minibtn" id="resetBtn" data-testid="reset">Start the story over</button>
+    <footer>Made for a kid who really loves Ariel.</footer>
+  </div>
+</section>
+
+<!-- ============================ STORY ============================ -->
+<section class="screen" id="story">
+  <div class="sheet">
+    <div class="cast" id="storyCast"></div>
+    <div class="bubble" id="storyBubble"><span class="who" id="storyWho"></span><span id="storyText"></span></div>
+    <div class="bubble es" id="storyEs" hidden><span id="storyEsText"></span><span class="mean" id="storyMean" hidden></span></div>
+    <div class="minirow">
+      <button class="minibtn" id="storyLookBtn" hidden data-testid="story-look">🔍 What did she say?</button>
+      <button class="minibtn" id="storyHearBtn" data-testid="story-hear">🔊 Say it again</button>
+    </div>
+    <button class="bigbtn" id="storyNext" data-testid="story-next">Next <span class="emoji">▶️</span></button>
+  </div>
+</section>
+
+<!-- ========================== TRANSLATE ========================== -->
+<section class="screen" id="translate">
+  <div class="sheet">
+    <h2 id="trTitle">Find your voice!</h2>
+    <div class="voicebar" id="voiceBar"></div>
+    <div class="wordcard">
+      <div class="sub">Ariel says…</div>
+      <div class="es" id="trWord">la voz</div>
+      <div class="clue" id="trClue">🎤</div>
+      <div class="sub">What does that mean?</div>
+    </div>
+    <div class="choices" id="trChoices"></div>
+    <div class="minirow">
+      <button class="minibtn" id="trHint" data-testid="hint">💡 Hint</button>
+      <button class="minibtn" id="trSay" data-testid="say-again">🔊 Say it again</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================= WIN ============================= -->
+<section class="screen" id="win">
+  <div class="sheet">
+    <div class="cast" id="winCast"><span>🧜‍♀️</span><span>✨</span></div>
+    <h2 id="winTitle">Level done!</h2>
+    <div class="subtitle" id="winText"></div>
+    <button class="bigbtn gold" id="winNext" data-testid="win-next"><span class="emoji">▶️</span> Keep going</button>
+    <button class="minibtn" id="winHome">🏠 Back to the map</button>
+  </div>
+</section>
+
+<!-- ============================ FINALE =========================== -->
+<section class="screen" id="finale">
+  <div class="sheet">
+    <h1 id="finTitle">Go, Ariel!</h1>
+    <div class="hug" id="finHug"></div>
+    <div class="subtitle" id="finText">Everybody hug!</div>
+    <button class="clapbtn" id="clapBtn" data-testid="clap">👏</button>
+    <div class="claprow" id="clapRow"></div>
+    <button class="bigbtn gold" id="finAgain" hidden data-testid="play-again"><span class="emoji">🔁</span> Play again</button>
+    <button class="minibtn" id="finHome" hidden>🏠 Back to the map</button>
+  </div>
+</section>
+
+<script>
+/* ==================================================================== *
+ * Ariel and the Lost Voice
+ * A six-level story game. Ursula takes Ariel's voice and King Triton's
+ * trident; Ariel gets them back with help from Prince Eric and her six
+ * sisters. While her voice is gone she can only speak Spanish, so the
+ * way to find it again is to work out what her words mean.
+ *
+ * One file, no build step, no network. Same shape as the other games
+ * in this collection: DOM screens for talking and thinking, one canvas
+ * for swimming, walking and the sister levels.
+ * ==================================================================== */
+
+/* ---------------- Storage (wrapped: file:// can throw) ---------------- */
+const Store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+
+/* ---------------- Sound: WebAudio tones, like the other games -------- */
+let soundOn = Store.get('ariel_sound') !== 'off';
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tone(freq, start, dur, type='sine', vol=0.18){
+  if(!soundOn || !audioCtx) return;
+  const t0 = audioCtx.currentTime + start;
+  const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+function slide(f1, f2, start, dur, type='sine', vol=0.16){
+  if(!soundOn || !audioCtx) return;
+  const t0 = audioCtx.currentTime + start;
+  const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(f1, t0);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20,f2), t0 + dur);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+const SFX = {
+  pop(){   ensureAudio(); tone(520,0,0.12,'triangle',0.14); },
+  chime(){ ensureAudio(); tone(880,0,0.10,'sine',0.13); tone(1320,0.06,0.14,'sine',0.10); },
+  swoosh(){ensureAudio(); slide(900,320,0,0.14,'sawtooth',0.07); },
+  jump(){  ensureAudio(); slide(380,760,0,0.16,'sine',0.10); },
+  land(){  ensureAudio(); tone(190,0,0.09,'triangle',0.09); },
+  bonk(){  ensureAudio(); tone(200,0,0.16,'square',0.10); tone(150,0.10,0.20,'sine',0.10); },
+  sparkle(){ensureAudio(); [784,1046,1318].forEach((f,i)=>tone(f,i*0.05,0.18,'sine',0.11)); },
+  shield(){ensureAudio(); slide(300,900,0,0.16,'triangle',0.12); tone(1200,0.12,0.14,'sine',0.08); },
+  zap(){   ensureAudio(); slide(700,180,0,0.30,'sawtooth',0.07); },
+  poof(){  ensureAudio(); slide(300,80,0,0.45,'square',0.11); tone(160,0.05,0.35,'triangle',0.09); },
+  cheer(){ ensureAudio(); [392,523,659,784,1046,1318].forEach((f,i)=>tone(f,i*0.08,0.25,'triangle',0.15)); },
+  clap(){  ensureAudio(); slide(1800,400,0,0.10,'sawtooth',0.10); tone(240,0,0.07,'square',0.08); },
+  wrong(){ ensureAudio(); tone(330,0,0.12,'triangle',0.10); tone(262,0.11,0.20,'triangle',0.10); },
+  trident(){ensureAudio(); [523,659,784,1046,1318,1568].forEach((f,i)=>tone(f,i*0.06,0.4,'sine',0.12)); }
+};
+
+/* ---------------- Speech -------------------------------------------- *
+ * Ariel's Spanish needs a real Spanish voice or the words come out
+ * sounding like English. Latin American Spanish first, then any Spanish
+ * at all, then give up and let the browser try — an anglicised "la voz"
+ * still beats silence, and the README tells the grown-up how to fix it. */
+const ES_LANGS = ['es-MX','es-US','es-419','es-CO','es-AR','es'];
+function voicesFor(prefixes){
+  if(!('speechSynthesis' in window)) return [];
+  const all = speechSynthesis.getVoices() || [];
+  for(const p of prefixes){
+    const hit = all.filter(v => v.lang && v.lang.replace('_','-').startsWith(p));
+    if(hit.length) return hit;
+  }
+  return [];
+}
+function femaleFirst(list){
+  const f = list.filter(v => /female|mónica|monica|paulina|sabina|helena|samantha|karen|moira/i.test(v.name));
+  return (f.length ? f : list)[0] || null;
+}
+function speak(text, {rate=0.95, pitch=1.25, lang='en-US', voice=null}={}){
+  if(!soundOn || !('speechSynthesis' in window)) return;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = rate; u.pitch = pitch; u.volume = 1; u.lang = lang;
+    if(voice) u.voice = voice;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+/* Spanish goes slower: it is the new language, and a learner needs the beat. */
+function speakEs(text, opts={}){
+  const v = femaleFirst(voicesFor(ES_LANGS));
+  speak(text, { rate:0.72, pitch:1.15, lang:(v && v.lang) || 'es-MX', voice:v, ...opts });
+}
+function stopSpeaking(){
+  if(!('speechSynthesis' in window)) return;
+  try{
+    speechSynthesis.cancel();
+    // Chrome sometimes ignores the first cancel() on an in-flight utterance.
+    setTimeout(()=>{ try{ speechSynthesis.cancel(); }catch(e){} }, 50);
+  }catch(e){}
+}
+if('speechSynthesis' in window){ try{ speechSynthesis.getVoices(); }catch(e){} }
+
+/* ---------------- Toast --------------------------------------------- */
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function toast(emoji, line1, line2, ms=2000){
+  document.getElementById('toastEm').textContent = emoji;
+  document.getElementById('toastT1').textContent = line1;
+  document.getElementById('toastT2').textContent = line2 || '';
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> toastEl.classList.remove('show'), ms);
+}
+
+/* ---------------- Emoji sprites (cached, like the ocean game) -------- */
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+const spriteCache = new Map();
+let canFilter = true;
+try{
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.filter = 'hue-rotate(90deg)';
+  canFilter = probe.filter === 'hue-rotate(90deg)';
+}catch(e){ canFilter = false; }
+function sprite(ch, size, filter){
+  const key = ch + '|' + size + '|' + (filter||'') + '|' + DPR;
+  let c = spriteCache.get(key);
+  if(c) return c;
+  const box = Math.ceil(size * 1.45);
+  c = document.createElement('canvas');
+  c.width = c.height = Math.ceil(box * DPR);
+  const g = c.getContext('2d');
+  g.scale(DPR, DPR);
+  if(filter && canFilter) g.filter = filter;
+  g.font = size + 'px ' + EMOJI_FONT;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(ch, box/2, box/2);
+  c.box = box;
+  spriteCache.set(key, c);
+  return c;
+}
+function drawEmoji(g, ch, x, y, size, opts){
+  const o = opts || {};
+  const c = sprite(ch, size, o.filter), b = c.box;
+  g.save();
+  if(o.alpha !== undefined) g.globalAlpha = o.alpha;
+  g.translate(x, y);
+  if(o.rot) g.rotate(o.rot);
+  if(o.flip === -1) g.scale(-1, 1);
+  g.drawImage(c, -b/2, -b/2, b, b);
+  g.restore();
+}
+function roundBox(g, x, y, w, h, r){
+  // ctx.roundRect is too new for older iPads, so draw the box by hand.
+  const rr = Math.min(r, w/2, h/2);
+  g.beginPath();
+  g.moveTo(x+rr, y);
+  g.arcTo(x+w, y,   x+w, y+h, rr);
+  g.arcTo(x+w, y+h, x,   y+h, rr);
+  g.arcTo(x,   y+h, x,   y,   rr);
+  g.arcTo(x,   y,   x+w, y,   rr);
+  g.closePath();
+}
+const rand = (a,b)=> a + Math.random()*(b-a);
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const dist2 = (x1,y1,x2,y2)=>{ const dx=x1-x2, dy=y1-y2; return dx*dx+dy*dy; };
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+/* ==================================================================== *
+ * The Spanish words. These are the pieces of Ariel's voice: she drops
+ * them in Ursula's garden in level 2 and wins them back in level 3.
+ * ==================================================================== */
+const WORDS = [
+  { es:'la voz',      en:'voice',   emoji:'🎤', hint:'It is the thing Ursula took from Ariel.' },
+  { es:'el mar',      en:'sea',     emoji:'🌊', hint:'It is the big blue water Ariel lives in.' },
+  { es:'la hermana',  en:'sister',  emoji:'👧', hint:'Ariel has six of them.' },
+  { es:'el pez',      en:'fish',    emoji:'🐟', hint:'It swims and it has fins.' },
+  { es:'el cangrejo', en:'crab',    emoji:'🦀', hint:'It is red and it walks sideways.' },
+  { es:'la concha',   en:'shell',   emoji:'🐚', hint:'You find them in the sand.' },
+  { es:'el rey',      en:'king',    emoji:'🤴', hint:'Ariel calls him Papá. He wears a crown.' },
+  { es:'la estrella', en:'star',    emoji:'⭐', hint:'It twinkles way up in the sky.' },
+  { es:'el amor',     en:'love',    emoji:'💗', hint:'It is what Ariel feels for Eric.' },
+  { es:'cantar',      en:'to sing', emoji:'🎵', hint:'It is what you do with your voice.' },
+  { es:'el barco',    en:'boat',    emoji:'⛵', hint:'Eric sails on one.' },
+  { es:'la corona',   en:'crown',   emoji:'👑', hint:'A king wears it on his head.' }
+];
+const wordByEs = es => WORDS.find(w => w.es === es);
+
+/* ==================================================================== *
+ * The story. Everything the game does is a list of chapters: some are
+ * people talking, some are levels you play.
+ *
+ * While Ursula has Ariel's voice, every line Ariel says is Spanish, and
+ * the 🔍 button is the only way to find out what it meant — the same
+ * puzzle the whole game is built on, just in small doses.
+ * ==================================================================== */
+const CHAPTERS = [
+  { kind:'story', level:1, beats:[
+    { who:'The story', cast:['🐠','🧜‍♀️','🐚'], en:'Ariel is a mermaid. She lives in the big blue sea with her papá, King Triton, and her six sisters.' },
+    { who:'Ariel', cast:['🧜‍♀️','🎶'], en:'I love to swim and I love to sing! Come on — help me find eight shells.' }
+  ]},
+  { kind:'swim', level:1, cfg:{
+      goal:8, item:'🐚', itemName:'shells', badge:'🐚',
+      title:'Level 1 · The Big Blue Sea',
+      sisters:true, eels:false, boss:false, words:false,
+      winTitle:'Eight shells!', winText:'Ariel found every shell in the sea. But somebody was watching her…' } },
+
+  { kind:'story', level:2, beats:[
+    { who:'Ursula', cast:['🐙','🧜‍♀️'], en:'Hellooo, little mermaid. What a pretty little voice you have. I think I will keep it.' },
+    { who:'The story', cast:['🐙','🎤','🔱'], en:'Ursula grabbed Ariel\'s voice AND King Triton\'s trident, and she hid them both.' },
+    { who:'Ariel', cast:['🧜‍♀️','😯'], es:'¡Mi voz! ¿Dónde está mi voz?', en:'My voice! Where is my voice?' },
+    { who:'The story', cast:['🫧','🫧','🫧'], en:'Ariel\'s voice broke into little words and floated off into Ursula\'s garden. Until she gets it back, every word Ariel says comes out in Spanish. Go and catch the words!' }
+  ]},
+  { kind:'swim', level:2, cfg:{
+      goal:8, item:'🫧', itemName:'words', badge:'🫧',
+      title:'Level 2 · Ursula\'s Garden',
+      sisters:false, eels:true, boss:false, words:true,
+      winTitle:'You caught the words!', winText:'Eight Spanish words, safe in Ariel\'s hands. Now… what do they mean?' } },
+
+  { kind:'story', level:3, beats:[
+    { who:'Ariel', cast:['🧜‍♀️','🫧'], es:'Tengo las palabras. ¿Qué quieren decir?', en:'I have the words. What do they mean?' },
+    { who:'Sebastian', cast:['🦀','🧜‍♀️'], en:'Every word you work out gives Ariel back a piece of her voice! And if a word is tricky, tap the light bulb. I will help you, mon.' }
+  ]},
+  { kind:'translate', level:3, cfg:{
+      goal:6,
+      title:'Level 3 · Find Your Voice',
+      winTitle:'Six pieces of her voice!', winText:'Ariel\'s voice is warm and glowy again — but Ursula still has it locked in her shell. Up on the beach, Prince Eric is looking everywhere for Ariel.' } },
+
+  { kind:'story', level:4, beats:[
+    { who:'Ariel', cast:['🧜‍♀️','⛵'], es:'Voy a la playa. Eric me va a ayudar.', en:'I am going to the beach. Eric is going to help me.' },
+    { who:'The story', cast:['🧜‍♀️','➡️','👸'], en:'When a mermaid comes out of the water, she gets legs. No more swimming, Ariel — this time you have to WALK. Use the ◀ ▶ buttons, and ⤴ to jump over the rocks.' }
+  ]},
+  { kind:'walk', level:4, cfg:{
+      goal:6, item:'💗', itemName:'hearts', badge:'💗',
+      title:'Level 4 · Walk to Prince Eric',
+      winTitle:'You found Eric!', winText:'Ariel and Eric held hands on the sand. And then the water went very, very still…' } },
+
+  { kind:'story', level:5, beats:[
+    { who:'Prince Eric', cast:['🤴','👸'], en:'Ariel! I looked for you on every beach in the kingdom.' },
+    { who:'Ariel', cast:['👸','😨'], es:'¡Cuidado! Ursula viene.', en:'Look out! Ursula is coming.' },
+    { who:'The story', cast:['🐙','👧','👧','🤴'], en:'Ursula came roaring out of the sea. But Ariel\'s six sisters swam right in front of Prince Eric and made a wall.' },
+    { who:'The sisters', cast:['👭','🛡️'], en:'Nobody touches Prince Eric! Quick — tap whichever sister the zap is coming at, and she will block it!' }
+  ]},
+  { kind:'shield', level:5, cfg:{
+      goal:8, badge:'🛡️',
+      title:'Level 5 · The Sisters Protect Eric',
+      winTitle:'Every zap blocked!', winText:'Eight zaps, and not one of them got through. Ursula was FURIOUS…' } },
+
+  { kind:'story', level:6, beats:[
+    { who:'The story', cast:['🐙','🔱'], en:'Ursula got bigger. And bigger. And BIGGER — as big as a mountain — and she swung the trident at Ariel and Eric.' },
+    { who:'Ariel', cast:['👸','🔱'], es:'¡El tridente! Es de mi papá.', en:'The trident! It belongs to my papá.' },
+    { who:'The story', cast:['✨','🧜‍♀️','✨'], en:'Ariel dived back into the sea. Catch six sparkles to make her strong, and then grab the trident!' }
+  ]},
+  { kind:'swim', level:6, cfg:{
+      goal:6, item:'✨', itemName:'sparkles', badge:'✨',
+      title:'Level 6 · The Trident',
+      sisters:false, eels:false, boss:true, words:false, trident:true,
+      winTitle:'You got the trident!', winText:'' } },
+
+  { kind:'story', level:6, beats:[
+    { who:'The story', cast:['🔱','🐙','💥'], en:'The trident flew back to King Triton, and it went ZAP. Ursula popped into a million bubbles and washed away.' },
+    { who:'The story', cast:['🌊','✨'], en:'She is gone. All the way gone. She can never, ever come back.' },
+    { who:'The story', cast:['🎤','✨','👸'], en:'And the shell around Ariel\'s neck cracked open, and her voice came flying home.' },
+    { who:'Ariel', cast:['👸','🎶'], en:'I can talk again! In English… AND in Spanish. I am keeping both.' },
+    { who:'King Triton', cast:['🤴','🔱','👸'], en:'You found your own voice, Ariel. Come here — everybody hug.' }
+  ]},
+  { kind:'finale', level:6 }
+];
+
+const LEVELS = [
+  { n:1, em:'🏊‍♀️', t:'The Big Blue Sea' },
+  { n:2, em:'🫧', t:'Ursula\'s Garden' },
+  { n:3, em:'💡', t:'Find Your Voice' },
+  { n:4, em:'🚶‍♀️', t:'Walk to Eric' },
+  { n:5, em:'👭', t:'Sisters and Eric' },
+  { n:6, em:'🔱', t:'The Trident' }
+];
+LEVELS.forEach(L => { L.start = CHAPTERS.findIndex(c => c.level === L.n); });
+
+/* ==================================================================== *
+ * Screens and progress
+ * ==================================================================== */
+const screenEls = Array.from(document.querySelectorAll('.screen'));
+function showScreen(id, theme){
+  screenEls.forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  el.classList.remove('land','dark');
+  if(theme) el.classList.add(theme);
+  el.classList.add('active');
+  el.scrollTop = 0;
+}
+function setPlaying(on, walking){
+  document.body.classList.toggle('playing', !!on);
+  document.body.classList.toggle('walking', !!walking);
+}
+function setGoal(badge, text){
+  document.getElementById('goalBadge').firstChild.textContent = badge + ' ';
+  document.getElementById('goalText').textContent = text;
+}
+
+let unlocked = Math.max(1, Math.min(6, parseInt(Store.get('ariel_unlocked')||'1', 10) || 1));
+let cleared = Math.max(0, Math.min(6, parseInt(Store.get('ariel_cleared')||'0', 10) || 0));
+let collectedWords = [];              // the Spanish words caught in level 2
+let chapterIdx = 0;
+
+function renderMap(){
+  const map = document.getElementById('levelMap');
+  map.innerHTML = '';
+  LEVELS.forEach(L => {
+    const b = document.createElement('button');
+    b.className = 'lvl' + (L.n > unlocked ? ' locked' : '');
+    b.dataset.testid = 'level-' + L.n;
+    b.innerHTML = '<div class="em">' + L.em + '</div>' +
+                  '<div class="n">Level ' + L.n + '</div>' +
+                  '<div class="t">' + L.t + '</div>' +
+                  '<div class="star">' + (L.n <= cleared ? '⭐' : (L.n > unlocked ? '🔒' : '')) + '</div>';
+    b.addEventListener('click', () => {
+      if(L.n > unlocked){
+        SFX.bonk();
+        toast('🔒', 'Not yet!', 'Finish level ' + unlocked + ' first.');
+        return;
+      }
+      SFX.pop(); startChapter(L.start);
+    });
+    map.appendChild(b);
+  });
+}
+
+function goHome(){
+  stopLevel();
+  stopSpeaking();
+  setPlaying(false);
+  renderMap();
+  showScreen('home');
+}
+
+function startChapter(i){
+  stopLevel();
+  chapterIdx = i;
+  const ch = CHAPTERS[i];
+  if(!ch){ goHome(); return; }
+  if(ch.kind === 'story')      startStory(ch);
+  else if(ch.kind === 'translate') startTranslate(ch);
+  else if(ch.kind === 'finale')    startFinale();
+  else                             startLevel(ch);
+}
+function nextChapter(){ startChapter(chapterIdx + 1); }
+
+/* Level finished: unlock the next one, then the little "you did it" screen. */
+function completeLevel(ch){
+  const cfg = ch.cfg || {};
+  cleared = Math.max(cleared, ch.level);
+  unlocked = Math.max(unlocked, Math.min(6, ch.level + 1));
+  Store.set('ariel_cleared', String(cleared));
+  Store.set('ariel_unlocked', String(unlocked));
+  stopLevel();
+  setPlaying(false);
+  SFX.cheer();
+  document.getElementById('winTitle').textContent = cfg.winTitle || 'You did it!';
+  document.getElementById('winText').textContent  = cfg.winText || '';
+  document.getElementById('winText').hidden = !cfg.winText;
+  document.getElementById('winCast').innerHTML = '<span>' + (cfg.badge || '⭐') + '</span><span>🧜‍♀️</span><span>✨</span>';
+  showScreen('win');
+  speak(cfg.winTitle || 'You did it!');
+}
+
+/* ==================================================================== *
+ * Story screen
+ * ==================================================================== */
+let storyBeats = [], beatIdx = 0;
+function startStory(ch){
+  storyBeats = ch.beats; beatIdx = 0;
+  setPlaying(false);
+  showScreen('story');
+  renderBeat();
+}
+function renderBeat(){
+  const b = storyBeats[beatIdx];
+  document.getElementById('storyCast').innerHTML = b.cast.map(c => '<span>' + c + '</span>').join('');
+  document.getElementById('storyWho').textContent = b.who;
+  const esBox = document.getElementById('storyEs');
+  const lookBtn = document.getElementById('storyLookBtn');
+  const meanEl = document.getElementById('storyMean');
+  if(b.es){
+    // Voice gone: the Spanish is what she actually said, English stays hidden
+    // behind 🔍 so the child has a reason to wonder what it means.
+    document.getElementById('storyText').textContent = '(Ariel opens her mouth and this comes out…)';
+    esBox.hidden = false;
+    document.getElementById('storyEsText').textContent = b.es;
+    meanEl.textContent = b.en;
+    meanEl.hidden = true;
+    lookBtn.hidden = false;
+    speakEs(b.es);
+  } else {
+    document.getElementById('storyText').textContent = b.en;
+    esBox.hidden = true;
+    lookBtn.hidden = true;
+    speak(b.en, { rate:0.92 });
+  }
+  document.getElementById('storyNext').innerHTML =
+    (beatIdx === storyBeats.length - 1 ? 'Let\'s go! <span class="emoji">▶️</span>' : 'Next <span class="emoji">▶️</span>');
+}
+document.getElementById('storyNext').addEventListener('click', () => {
+  SFX.pop();
+  beatIdx++;
+  if(beatIdx < storyBeats.length) renderBeat();
+  else { stopSpeaking(); nextChapter(); }
+});
+document.getElementById('storyLookBtn').addEventListener('click', () => {
+  const b = storyBeats[beatIdx];
+  SFX.chime();
+  document.getElementById('storyMean').hidden = false;
+  speak('That means: ' + b.en, { rate:0.9 });
+});
+document.getElementById('storyHearBtn').addEventListener('click', () => {
+  const b = storyBeats[beatIdx];
+  if(b.es) speakEs(b.es); else speak(b.en, { rate:0.9 });
+});
+
+/* ==================================================================== *
+ * Level 3 — the translating level. This is the learning bit: Ariel says
+ * a Spanish word, the child picks what it means in English, and every
+ * right answer is another piece of her voice. Wrong answers cost
+ * nothing at all: the word just wobbles and waits.
+ * ==================================================================== */
+let trQueue = [], trCurrent = null, trHints = 0, trDone = 0, trChapter = null, trLock = false;
+
+function startTranslate(ch){
+  trChapter = ch;
+  const pool = collectedWords.length >= ch.cfg.goal ? collectedWords : WORDS;
+  trQueue = shuffle(pool).slice(0, ch.cfg.goal);
+  trDone = 0;
+  setPlaying(false);
+  document.getElementById('trTitle').textContent = ch.cfg.title;
+  const bar = document.getElementById('voiceBar');
+  bar.innerHTML = trQueue.map(()=> '<span>🎵</span>').join('');
+  showScreen('translate');
+  nextWord();
+}
+function nextWord(){
+  if(trDone >= trQueue.length){ completeLevel(trChapter); return; }
+  trCurrent = trQueue[trDone];
+  trHints = 0; trLock = false;
+  document.getElementById('trWord').textContent = trCurrent.es;
+  const clue = document.getElementById('trClue');
+  clue.textContent = trCurrent.emoji;
+  clue.classList.remove('show');
+
+  const others = shuffle(WORDS.filter(w => w.en !== trCurrent.en)).slice(0,2);
+  const choices = shuffle([trCurrent, ...others]);
+  const box = document.getElementById('trChoices');
+  box.innerHTML = '';
+  choices.forEach(w => {
+    const b = document.createElement('button');
+    b.className = 'choice';
+    b.textContent = w.en;
+    b.dataset.en = w.en;
+    b.dataset.testid = 'choice-' + w.en.replace(/\s+/g,'-');
+    b.addEventListener('click', () => answer(b, w));
+    box.appendChild(b);
+  });
+  setTimeout(()=> speakEs(trCurrent.es), 250);
+}
+function answer(btn, w){
+  if(trLock) return;
+  if(w.en === trCurrent.en){
+    trLock = true;
+    btn.classList.add('right');
+    SFX.sparkle();
+    document.getElementById('trClue').classList.add('show');
+    const bar = document.getElementById('voiceBar');
+    if(bar.children[trDone]) bar.children[trDone].classList.add('on');
+    speak(trCurrent.es + ' means ' + trCurrent.en + '!', { rate:0.9 });
+    toast(trCurrent.emoji, trCurrent.es + ' = ' + trCurrent.en, 'A piece of her voice!');
+    trDone++;
+    setTimeout(nextWord, 1900);
+  } else {
+    btn.classList.add('wrong');
+    SFX.wrong();
+    setTimeout(()=> btn.classList.remove('wrong'), 420);
+    speak(pick(['Not that one. Try again!','Close! Try another.','Hmm, try again.']), { rate:0.95 });
+  }
+}
+/* The hint button never runs out, and it helps a bit more each time. */
+document.getElementById('trHint').addEventListener('click', () => {
+  if(trLock) return;
+  trHints++;
+  SFX.chime();
+  if(trHints === 1){
+    speakEs(trCurrent.es, { rate:0.6 });
+    toast('💡', 'Listen again…', trCurrent.es);
+  } else if(trHints === 2){
+    document.getElementById('trClue').classList.add('show');
+    speak(trCurrent.hint, { rate:0.9 });
+    toast(trCurrent.emoji, 'Here is a picture!', trCurrent.hint, 3000);
+  } else {
+    const wrongs = Array.from(document.querySelectorAll('#trChoices .choice'))
+      .filter(b => b.dataset.en !== trCurrent.en && !b.classList.contains('gone'));
+    if(wrongs.length > 1){
+      wrongs[0].classList.add('gone');
+      speak('That one is not it. Now there are only two!', { rate:0.92 });
+    } else {
+      speak('It means ' + trCurrent.en + '. Tap ' + trCurrent.en + '!', { rate:0.9 });
+      toast('💡', 'It means ' + trCurrent.en, 'Tap it!', 3000);
+    }
+  }
+});
+document.getElementById('trSay').addEventListener('click', () => { if(trCurrent) speakEs(trCurrent.es); });
+
+/* ==================================================================== *
+ * The playfield — swimming, walking and the sister wall all live on
+ * one canvas. Nobody can lose any of them: bumping into something is
+ * always a wobble and a lost second, never a game over.
+ * ==================================================================== */
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+let vw = window.innerWidth, vh = window.innerHeight;
+function resize(){
+  const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+  if(nextDpr !== DPR){ DPR = nextDpr; spriteCache.clear(); }
+  vw = window.innerWidth; vh = window.innerHeight;
+  canvas.width = Math.floor(vw * DPR); canvas.height = Math.floor(vh * DPR);
+  canvas.style.width = vw + 'px'; canvas.style.height = vh + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+let L = null;                      // the level being played, or null
+let rafId = 0, lastT = 0;
+const parts = [];
+const keys = new Set();
+
+function burst(x, y, count, color){
+  for(let i=0;i<count;i++){
+    const a = Math.random()*Math.PI*2, s = rand(60,240);
+    parts.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:rand(0.4,0.9), t:0, color, r:rand(3,7) });
+  }
+}
+function updateParts(dt){
+  for(let i=parts.length-1;i>=0;i--){
+    const p = parts[i];
+    p.t += dt;
+    if(p.t >= p.life){ parts.splice(i,1); continue; }
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 120*dt; p.vx *= 0.97;
+  }
+}
+function drawParts(g, camx, camy){
+  parts.forEach(p => {
+    g.globalAlpha = Math.max(0, 1 - p.t/p.life);
+    g.fillStyle = p.color;
+    g.beginPath(); g.arc(p.x - camx, p.y - camy, p.r, 0, Math.PI*2); g.fill();
+  });
+  g.globalAlpha = 1;
+}
+
+/* ---------------- Shared input -------------------------------------- */
+let pointer = null;                 // {x,y} screen point being held
+canvas.addEventListener('pointerdown', (e) => {
+  ensureAudio();
+  pointer = { x:e.clientX, y:e.clientY, id:e.pointerId };
+  try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+  if(L && L.kind === 'shield') shieldTap(e.clientX, e.clientY);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if(pointer && e.pointerId === pointer.id){ pointer.x = e.clientX; pointer.y = e.clientY; }
+});
+function endPointer(e){ if(pointer && e.pointerId === pointer.id) pointer = null; }
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+window.addEventListener('keydown', (e) => {
+  if(!L) return;
+  const k = e.key.toLowerCase();
+  if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d',' '].includes(k)){
+    e.preventDefault(); ensureAudio(); keys.add(k === ' ' ? 'space' : k);
+    if(L.kind === 'walk' && (k === ' ' || k === 'arrowup' || k === 'w')) walkJump();
+  }
+  if(L.kind === 'shield' && '123456'.includes(k)) shieldBlock(parseInt(k,10) - 1);
+});
+window.addEventListener('keyup', (e) => keys.delete(e.key === ' ' ? 'space' : e.key.toLowerCase()));
+window.addEventListener('blur', () => { keys.clear(); pointer = null; });
+
+function keyVector(){
+  let dx = 0, dy = 0;
+  if(keys.has('arrowleft')  || keys.has('a')) dx -= 1;
+  if(keys.has('arrowright') || keys.has('d')) dx += 1;
+  if(keys.has('arrowup')    || keys.has('w')) dy -= 1;
+  if(keys.has('arrowdown')  || keys.has('s')) dy += 1;
+  return { dx, dy };
+}
+
+/* ---------------- Level start / stop -------------------------------- */
+function startLevel(ch){
+  const cfg = ch.cfg;
+  L = { ch, kind:ch.kind, cfg, got:0, done:false, t:0,
+        cam:{x:0,y:0}, me:{x:0,y:0,vx:0,vy:0,face:1,spin:0,hurt:0} };
+  parts.length = 0; keys.clear(); pointer = null;
+  screenEls.forEach(s => s.classList.remove('active'));
+  setPlaying(true, ch.kind === 'walk');
+  setGoal(cfg.badge, '0 / ' + cfg.goal);
+  if(ch.kind === 'swim')   initSwim();
+  if(ch.kind === 'walk')   initWalk();
+  if(ch.kind === 'shield') initShield();
+  toast(cfg.badge, cfg.title, goalLine());
+  speak(goalLine(), { rate:0.95 });
+  startLoop();
+}
+function goalLine(){
+  const c = L.cfg;
+  if(L.kind === 'shield') return 'Block ' + c.goal + ' zaps!';
+  if(L.kind === 'walk')   return 'Walk to Eric and pick up ' + c.goal + ' hearts!';
+  return 'Collect ' + c.goal + ' ' + c.itemName + '!';
+}
+function stopLevel(){
+  stopLoop();
+  L = null;
+  keys.clear(); pointer = null;
+  parts.length = 0;
+}
+function bumpMe(x, y){
+  // The whole penalty, everywhere in the game: a spin and a second lost.
+  const me = L.me;
+  if(me.hurt > 0) return;
+  me.hurt = 1.1; me.spin = Math.PI * 4;
+  SFX.bonk();
+  burst(x, y, 10, '#b388ff');
+}
+function collect(n){
+  L.got += n;
+  setGoal(L.cfg.badge, L.got + ' / ' + L.cfg.goal);
+}
+
+/* ==================================================================== *
+ * SWIM levels (1, 2 and 6)
+ * ==================================================================== */
+const SEAWEED = ['🌿','🪸','🪨','🐚','🌊'];
+function initSwim(){
+  const c = L.cfg;
+  L.W = c.boss ? 1900 : 2500;
+  L.H = c.boss ? 1500 : 1800;
+  L.me.x = L.W/2; L.me.y = L.H - 260;
+  L.items = []; L.eels = []; L.fish = []; L.decor = []; L.zaps = []; L.trident = null;
+
+  const words = shuffle(WORDS).slice(0, c.goal);
+  for(let i=0;i<c.goal;i++){
+    L.items.push({
+      x: rand(140, L.W-140), y: rand(140, L.H-220),
+      ch: c.item, bob: Math.random()*6,
+      word: c.words ? words[i] : null, got:false
+    });
+  }
+  if(c.eels) for(let i=0;i<5;i++)
+    L.eels.push({ x:rand(200,L.W-200), y:rand(200,L.H-200), ang:Math.random()*Math.PI*2, sp:rand(55,95) });
+  if(c.sisters) for(let i=0;i<6;i++)
+    L.fish.push({ x:rand(150,L.W-150), y:rand(150,L.H-150), ang:Math.random()*Math.PI*2, sp:rand(30,60), ch:'🧜‍♀️' });
+  for(let i=0;i<14;i++)
+    L.fish.push({ x:rand(100,L.W-100), y:rand(100,L.H-100), ang:Math.random()*Math.PI*2, sp:rand(40,80), ch:pick(['🐠','🐟','🐡','🐙','🦑']) });
+  for(let i=0;i<40;i++)
+    L.decor.push({ x:rand(40,L.W-40), y:rand(120,L.H-60), ch:pick(SEAWEED), s:rand(26,54) });
+  if(c.boss){
+    L.boss = { x:L.W/2, y:170, t:0, fire:1.6, big:1 };
+  }
+  // start the camera already on Ariel, or the first second of the level is
+  // spent watching it slide over from the corner of the world
+  L.cam.x = clamp(L.me.x - vw/2, 0, Math.max(0, L.W - vw));
+  L.cam.y = clamp(L.me.y - vh/2, 0, Math.max(0, L.H - vh));
+}
+function updateSwim(dt){
+  const me = L.me, c = L.cfg;
+  // steering: finger first, arrow keys as well
+  let ax = 0, ay = 0;
+  if(pointer){
+    const tx = pointer.x + L.cam.x, ty = pointer.y + L.cam.y;
+    const d = Math.hypot(tx-me.x, ty-me.y);
+    if(d > 12){ ax = (tx-me.x)/d; ay = (ty-me.y)/d; }
+  }
+  const kv = keyVector();
+  if(kv.dx || kv.dy){
+    const kl = Math.hypot(kv.dx, kv.dy);
+    ax = kv.dx/kl; ay = kv.dy/kl;
+  }
+  const SPEED = 330;
+  me.vx += (ax*SPEED - me.vx) * Math.min(1, dt*4.5);
+  me.vy += (ay*SPEED - me.vy) * Math.min(1, dt*4.5);
+  me.x = clamp(me.x + me.vx*dt, 40, L.W-40);
+  me.y = clamp(me.y + me.vy*dt, 40, L.H-40);
+  if(Math.abs(me.vx) > 12) me.face = me.vx > 0 ? 1 : -1;
+  if(me.hurt > 0){ me.hurt -= dt; me.spin *= 0.94; }
+
+  // items
+  L.items.forEach(it => {
+    if(it.got) return;
+    it.bob += dt*2;
+    if(dist2(me.x, me.y, it.x, it.y) < 52*52){
+      it.got = true;
+      collect(1);
+      burst(it.x, it.y, 14, it.word ? '#b388ff' : '#ffd54f');
+      if(it.word){
+        // Replaying a level should not stack the same word twice in the quiz.
+        if(!collectedWords.includes(it.word)) collectedWords.push(it.word);
+        SFX.sparkle();
+        toast(it.word.emoji, it.word.es, 'A piece of Ariel\'s voice!');
+        speakEs(it.word.es);
+      } else {
+        SFX.chime();
+        if(L.got === L.cfg.goal) SFX.cheer();
+      }
+      if(L.got >= c.goal && !L.done) swimGoalReached();
+    }
+  });
+  // eels bump you, that is all they do
+  L.eels.forEach(e => {
+    e.ang += rand(-1,1)*dt;
+    e.x += Math.cos(e.ang)*e.sp*dt; e.y += Math.sin(e.ang)*e.sp*dt;
+    if(e.x < 60 || e.x > L.W-60) e.ang = Math.PI - e.ang;
+    if(e.y < 60 || e.y > L.H-60) e.ang = -e.ang;
+    if(dist2(me.x, me.y, e.x, e.y) < 48*48) bumpMe(me.x, me.y);
+  });
+  L.fish.forEach(f => {
+    f.ang += rand(-0.6,0.6)*dt;
+    f.x += Math.cos(f.ang)*f.sp*dt; f.y += Math.sin(f.ang)*f.sp*dt;
+    if(f.x < 60 || f.x > L.W-60) f.ang = Math.PI - f.ang;
+    if(f.y < 60 || f.y > L.H-60) f.ang = -f.ang;
+  });
+  // the giant Ursula in level 6
+  if(L.boss){
+    const b = L.boss;
+    b.t += dt;
+    b.x = L.W/2 + Math.sin(b.t*0.6)*260;
+    b.big = 1 + Math.min(1.2, L.got*0.12);       // she grows as the fight goes on
+    b.fire -= dt;
+    if(b.fire <= 0){
+      b.fire = Math.max(0.7, 1.7 - L.got*0.12);
+      const d = Math.hypot(me.x-b.x, me.y-b.y) || 1;
+      L.zaps.push({ x:b.x, y:b.y+60, vx:(me.x-b.x)/d*180, vy:(me.y-b.y)/d*180, life:7 });
+      SFX.zap();
+    }
+    for(let i=L.zaps.length-1;i>=0;i--){
+      const z = L.zaps[i];
+      z.x += z.vx*dt; z.y += z.vy*dt; z.life -= dt;
+      if(z.life <= 0 || z.x < 0 || z.x > L.W || z.y < 0 || z.y > L.H){ L.zaps.splice(i,1); continue; }
+      if(dist2(me.x, me.y, z.x, z.y) < 44*44){
+        L.zaps.splice(i,1);
+        bumpMe(me.x, me.y);
+        // one sparkle bounces loose, right where you are, easy to grab back
+        const loose = L.items.find(it => it.got && !it.word);
+        if(loose && L.got > 0){
+          loose.got = false; loose.x = clamp(me.x + rand(-90,90), 60, L.W-60);
+          loose.y = clamp(me.y + rand(-90,90), 60, L.H-60);
+          L.got--; setGoal(L.cfg.badge, L.got + ' / ' + L.cfg.goal);
+        }
+      }
+    }
+    // the trident, once Ariel is strong enough
+    if(L.trident){
+      L.trident.bob += dt*3;
+      L.trident.x = b.x; L.trident.y = b.y + 120;
+      if(dist2(me.x, me.y, L.trident.x, L.trident.y) < 70*70 && !L.done){
+        L.done = true;
+        SFX.trident();
+        burst(L.trident.x, L.trident.y, 40, '#ffd54f');
+        toast('🔱', 'You got the trident!', 'Send it home to King Triton!');
+        setTimeout(()=> completeLevel(L.ch), 1400);
+      }
+    }
+  }
+  // camera
+  const tx = clamp(L.me.x - vw/2, 0, Math.max(0, L.W - vw));
+  const ty = clamp(L.me.y - vh/2, 0, Math.max(0, L.H - vh));
+  L.cam.x += (tx - L.cam.x) * Math.min(1, dt*5);
+  L.cam.y += (ty - L.cam.y) * Math.min(1, dt*5);
+}
+function swimGoalReached(){
+  if(L.cfg.trident){
+    L.trident = { x:L.boss.x, y:L.boss.y+120, bob:0 };
+    SFX.trident();
+    toast('🔱', 'Ariel is glowing!', 'Now swim up and grab the trident!');
+    speak('Now grab the trident!');
+  } else {
+    L.done = true;
+    setTimeout(()=> completeLevel(L.ch), 900);
+  }
+}
+function drawSwim(){
+  const g = ctx, c = L.cfg, cam = L.cam;
+  const grad = g.createLinearGradient(0, -cam.y, 0, L.H - cam.y);
+  if(c.boss){ grad.addColorStop(0,'#5b2a8c'); grad.addColorStop(.55,'#2a1560'); grad.addColorStop(1,'#0a0630'); }
+  else { grad.addColorStop(0,'#9fe8ee'); grad.addColorStop(.45,'#2fa3c9'); grad.addColorStop(1,'#08234c'); }
+  g.fillStyle = grad; g.fillRect(0,0,vw,vh);
+
+  // drifting bubbles
+  g.fillStyle = 'rgba(255,255,255,.16)';
+  for(let i=0;i<34;i++){
+    const bx = (i*197 % L.W) - cam.x*0.6;
+    const by = ((i*311 + L.t*40) % L.H) - cam.y*0.6;
+    g.beginPath(); g.arc(bx, L.H - by - cam.y*0.1, 5 + (i%4)*3, 0, Math.PI*2); g.fill();
+  }
+  // sandy floor
+  g.fillStyle = c.boss ? '#2b1a4a' : '#f0dfae';
+  g.fillRect(0, L.H - 60 - cam.y, vw, 200);
+
+  L.decor.forEach(d => drawEmoji(g, d.ch, d.x - cam.x, d.y - cam.y, d.s, { alpha:.55 }));
+  L.fish.forEach(f => drawEmoji(g, f.ch, f.x - cam.x, f.y - cam.y, 40,
+    { flip: Math.cos(f.ang) < 0 ? -1 : 1, alpha:.95 }));
+  L.eels.forEach(e => drawEmoji(g, '🐍', e.x - cam.x, e.y - cam.y, 48,
+    { flip: Math.cos(e.ang) < 0 ? -1 : 1, filter:'hue-rotate(250deg)' }));
+
+  L.items.forEach(it => {
+    if(it.got) return;
+    const y = it.y + Math.sin(it.bob)*7;
+    if(it.word){
+      // a word bubble: the Spanish word floating inside a bubble
+      const x = it.x - cam.x, yy = y - cam.y;
+      g.save();
+      g.fillStyle = 'rgba(255,255,255,.85)';
+      g.strokeStyle = '#b388ff'; g.lineWidth = 4;
+      const w = Math.max(100, it.word.es.length * 15 + 30);
+      roundBox(g, x - w/2, yy - 30, w, 60, 30); g.fill(); g.stroke();
+      g.fillStyle = '#6a3fa0'; g.font = 'bold 22px ' + "'Comic Sans MS','Trebuchet MS',sans-serif";
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(it.word.es, x, yy + 2);
+      g.restore();
+      drawEmoji(g, '🫧', x + w/2 - 4, yy - 26, 34, { alpha:.9 });
+    } else {
+      drawEmoji(g, it.ch, it.x - cam.x, y - cam.y, 46);
+    }
+  });
+
+  if(L.boss){
+    const b = L.boss;
+    drawEmoji(g, '🐙', b.x - cam.x, b.y - cam.y, 130 * b.big, { filter:'hue-rotate(250deg)' });
+    L.zaps.forEach(z => drawEmoji(g, '🟣', z.x - cam.x, z.y - cam.y, 34, { alpha:.95 }));
+    if(L.trident) drawEmoji(g, '🔱', L.trident.x - cam.x, (L.trident.y + Math.sin(L.trident.bob)*10) - cam.y, 74);
+  }
+
+  const me = L.me;
+  const glow = L.cfg.trident && L.trident;
+  if(glow){
+    g.save(); g.globalAlpha = .5; g.fillStyle = '#ffd54f';
+    g.beginPath(); g.arc(me.x - cam.x, me.y - cam.y, 56 + Math.sin(L.t*8)*6, 0, Math.PI*2); g.fill(); g.restore();
+  }
+  drawEmoji(g, '🧜‍♀️', me.x - cam.x, me.y - cam.y, 62,
+    { flip: me.face, rot: me.hurt > 0 ? me.spin*me.hurt : 0, alpha: me.hurt > 0 ? .8 : 1 });
+  drawParts(g, cam.x, cam.y);
+}
+
+/* ==================================================================== *
+ * WALK level (4) — on land a mermaid gets legs, so the controls change
+ * completely: left, right, and jump.
+ * ==================================================================== */
+const GRAVITY = 1800, JUMP_V = 660, WALK_SPEED = 250;
+function initWalk(){
+  const c = L.cfg;
+  L.W = 3400;
+  L.me.x = 120; L.me.y = 0; L.me.vy = 0; L.me.onGround = true; L.me.face = 1;
+  L.rocks = []; L.crabs = []; L.items = []; L.palms = []; L.gulls = [];
+  for(let i=0;i<9;i++)  L.rocks.push({ x: 420 + i*300 + rand(-60,60) });
+  for(let i=0;i<5;i++)  L.crabs.push({ x: 620 + i*520, dir: pick([-1,1]), home: 620 + i*520 });
+  for(let i=0;i<c.goal;i++)
+    L.items.push({ x: 300 + i*460 + rand(-40,40), h: i % 2 ? 150 : 30, got:false, bob:Math.random()*6 });
+  for(let i=0;i<10;i++) L.palms.push({ x: 180 + i*330 + rand(-70,70), s: rand(70,110) });
+  for(let i=0;i<6;i++)  L.gulls.push({ x: rand(0,L.W), y: rand(60,180), sp: rand(20,50) });
+  L.eric = { x: L.W - 180 };
+  L.cam.x = clamp(L.me.x - vw*0.35, 0, Math.max(0, L.W - vw));
+  L.cam.y = 0;
+}
+function walkJump(){
+  if(!L || L.kind !== 'walk') return;
+  const me = L.me;
+  if(me.onGround){ me.vy = JUMP_V; me.onGround = false; SFX.jump(); }
+}
+function updateWalk(dt){
+  const me = L.me, c = L.cfg;
+  let dx = 0;
+  const kv = keyVector();
+  dx = kv.dx;
+  if(L.holdLeft) dx -= 1;
+  if(L.holdRight) dx += 1;
+  // dragging a finger across the sand walks that way too
+  if(pointer && !L.holdLeft && !L.holdRight){
+    const tx = pointer.x + L.cam.x;
+    if(Math.abs(tx - me.x) > 24) dx += tx > me.x ? 1 : -1;
+  }
+  dx = clamp(dx, -1, 1);
+  if(dx) me.face = dx > 0 ? 1 : -1;
+  me.x = clamp(me.x + dx*WALK_SPEED*dt*(me.hurt > 0 ? .4 : 1), 40, L.W - 40);
+  me.vy -= GRAVITY*dt;
+  me.y += me.vy*dt;
+  if(me.y <= 0){
+    if(!me.onGround) SFX.land();
+    me.y = 0; me.vy = 0; me.onGround = true;
+  }
+  me.walkT = (me.walkT || 0) + (dx ? dt*10 : 0);
+  if(me.hurt > 0){ me.hurt -= dt; me.spin *= 0.9; }
+
+  L.crabs.forEach(cr => {
+    cr.x += cr.dir * 70 * dt;
+    if(Math.abs(cr.x - cr.home) > 120) cr.dir *= -1;
+    if(Math.abs(cr.x - me.x) < 42 && me.y < 50){
+      bumpMe(me.x, vh*0.5);
+      me.x -= me.face * 46;
+    }
+  });
+  L.rocks.forEach(r => {
+    if(Math.abs(r.x - me.x) < 40 && me.y < 44){
+      bumpMe(me.x, vh*0.5);
+      me.x -= me.face * 44;
+    }
+  });
+  L.items.forEach(it => {
+    if(it.got) return;
+    it.bob += dt*3;
+    if(Math.abs(it.x - me.x) < 52 && Math.abs(it.h - me.y) < 70){
+      it.got = true; collect(1); SFX.chime();
+      burst(it.x, it.h, 12, '#ff8fb1');
+      if(L.got === c.goal){ SFX.sparkle(); toast('💗', 'All the hearts!', 'Now go and find Eric!'); }
+    }
+  });
+  L.gulls.forEach(gl => { gl.x += gl.sp*dt; if(gl.x > L.W + 40) gl.x = -40; });
+
+  if(me.x > L.eric.x - 90 && !L.done){
+    L.done = true;
+    SFX.cheer(); burst(L.eric.x, vh*0.55, 30, '#ffd54f');
+    toast('🤴', 'Prince Eric!', L.got + ' of ' + c.goal + ' hearts');
+    setTimeout(()=> completeLevel(L.ch), 1200);
+  }
+  L.cam.x = clamp(me.x - vw*0.35, 0, Math.max(0, L.W - vw));
+  L.cam.y = 0;
+}
+function drawWalk(){
+  const g = ctx, cam = L.cam, me = L.me;
+  // groundY is where feet rest. The sea sits above the horizon, well behind
+  // it, so that walking along the sand never looks like walking on water.
+  const groundY = vh - 130;
+  const horizon = groundY - 70;
+  const sky = g.createLinearGradient(0,0,0,horizon);
+  sky.addColorStop(0,'#bde8ff'); sky.addColorStop(.7,'#ffe3c9'); sky.addColorStop(1,'#ffd7b0');
+  g.fillStyle = sky; g.fillRect(0,0,vw,horizon);
+  drawEmoji(g, '☀️', vw - 90, 90, 80, { alpha:.9 });
+
+  // the sea, far behind, scrolling slower than the sand
+  g.fillStyle = '#57c1e0';
+  g.fillRect(0, horizon - 80, vw, 80);
+  g.fillStyle = '#9fe8ee';
+  for(let i=0;i<26;i++){
+    let wx = (i*150 - cam.x*0.3) % (vw + 200);
+    if(wx < 0) wx += vw + 200;
+    g.beginPath(); g.arc(wx - 100, horizon - 76 + Math.sin(L.t*2 + i)*4, 24, Math.PI, 0); g.fill();
+  }
+  L.gulls.forEach(gl => drawEmoji(g, '🕊️', gl.x - cam.x*0.35, gl.y, 28, { alpha:.85 }));
+
+  // wet sand, then dry sand
+  g.fillStyle = '#efdcb0'; g.fillRect(0, horizon, vw, vh - horizon);
+  g.fillStyle = '#f8e9c2'; g.fillRect(0, horizon + 34, vw, vh - horizon);
+  g.fillStyle = '#e8d094';
+  for(let i=0;i<50;i++){
+    let sx = (i*137 - cam.x) % (vw + 140);
+    if(sx < 0) sx += vw + 140;
+    g.fillRect(sx - 70, groundY + 14 + (i%5)*22, 22, 4);
+  }
+  // palms stand on the sand a little way behind, so they scroll slower
+  L.palms.forEach(p => drawEmoji(g, '🌴', p.x - cam.x*0.75, groundY - 14 - p.s*0.42, p.s, { alpha:.95 }));
+  L.rocks.forEach(r => drawEmoji(g, '🪨', r.x - cam.x, groundY - 24, 52));
+  L.crabs.forEach(cr => drawEmoji(g, '🦀', cr.x - cam.x, groundY - 21, 46, { flip: cr.dir }));
+  L.items.forEach(it => {
+    if(it.got) return;
+    drawEmoji(g, '💗', it.x - cam.x, groundY - 34 - it.h + Math.sin(it.bob)*6, 44);
+  });
+
+  drawEmoji(g, '🤴', L.eric.x - cam.x, groundY - 36 + Math.sin(L.t*2)*4, 76);
+  drawEmoji(g, '❤️', L.eric.x - cam.x + 44, groundY - 92, 30, { alpha:.8 });
+
+  const bobY = Math.sin((me.walkT||0)) * (me.onGround ? 5 : 0);
+  drawEmoji(g, '👸', me.x - cam.x, groundY - 34 - me.y + bobY, 70,
+    { flip: me.face, rot: me.hurt > 0 ? me.spin*me.hurt*0.15 : 0 });
+  drawParts(g, cam.x, 0);
+
+  // a finish flag so it is obvious which way to walk
+  if(me.x < L.eric.x - vw*0.6){
+    drawEmoji(g, '➡️', vw - 60, groundY - 200, 44, { alpha:.5 + Math.sin(L.t*4)*.2 });
+  }
+}
+
+/* ==================================================================== *
+ * SHIELD level (5) — the six sisters make a wall in front of Eric.
+ * Tap the sister the zap is heading for and she blocks it.
+ * ==================================================================== */
+function initShield(){
+  L.sisters = [];
+  for(let i=0;i<6;i++) L.sisters.push({ glow:0, x:0, y:0, bob:Math.random()*6 });
+  L.zaps = [];
+  L.spawn = 1.1;
+  L.ursula = { x:0, y:0, t:0 };
+  L.missed = 0;
+  layoutShield();
+}
+function layoutShield(){
+  const gap = Math.min(110, vw/7.0);
+  L.gap = gap;
+  const baseY = Math.min(vh - 230, vh*0.62);
+  L.sisters.forEach((s,i) => {
+    s.x = vw/2 + (i - (L.sisters.length-1)/2)*gap;
+    s.y = baseY + Math.abs(i - (L.sisters.length-1)/2)*10;
+  });
+  L.ursula.x = vw/2; L.ursula.y = Math.max(130, vh*0.16);
+  L.eric = { x: vw/2, y: Math.min(vh - 110, vh*0.82) };
+}
+function shieldTap(x, y){
+  let best = -1, bestD = 90*90;
+  L.sisters.forEach((s,i) => {
+    const d = dist2(x, y, s.x, s.y);
+    if(d < bestD){ bestD = d; best = i; }
+  });
+  if(best >= 0) shieldBlock(best);
+}
+function shieldBlock(i){
+  if(!L || L.kind !== 'shield' || L.done) return;
+  const s = L.sisters[i];
+  s.bob = 0; s.glow = 0.45;
+  // Blocking works as soon as the zap is a quarter of the way down: a
+  // four-year-old should not have to be frame-perfect about anything.
+  const z = L.zaps.find(z => z.lane === i && z.t/z.dur > 0.18);
+  if(z){
+    L.zaps.splice(L.zaps.indexOf(z), 1);
+    s.glow = 1;
+    SFX.shield();
+    burst(s.x, s.y, 16, '#ffd54f');
+    collect(1);
+    if(L.got >= L.cfg.goal && !L.done){
+      L.done = true;
+      SFX.cheer();
+      setTimeout(()=> completeLevel(L.ch), 1000);
+    }
+  } else {
+    SFX.pop();
+  }
+}
+function updateShield(dt){
+  layoutShield();
+  L.ursula.t += dt;
+  L.sisters.forEach(s => { s.bob += dt*2; if(s.glow > 0) s.glow -= dt*1.6; });
+
+  if(!L.done){
+    L.spawn -= dt;
+    if(L.spawn <= 0){
+      L.spawn = Math.max(0.85, 1.9 - L.got*0.11);
+      const lane = Math.floor(rand(0, L.sisters.length));
+      L.zaps.push({ lane, t:0, dur: Math.max(1.15, 2.2 - L.got*0.1) });
+      SFX.zap();
+    }
+  }
+  for(let i=L.zaps.length-1;i>=0;i--){
+    const z = L.zaps[i];
+    z.t += dt;
+    if(z.t >= z.dur){
+      // A zap that gets through does nothing bad — the sisters' hug stops
+      // it anyway. It just does not count toward the eight.
+      L.zaps.splice(i,1);
+      L.missed++;
+      SFX.bonk();
+      burst(L.sisters[z.lane].x, L.sisters[z.lane].y, 12, '#b388ff');
+      if(L.missed % 3 === 1) toast('🫂', 'Phew!', 'Tap the sister the zap is going to!');
+    }
+  }
+}
+function drawShield(){
+  const g = ctx;
+  const sky = g.createLinearGradient(0,0,0,vh);
+  sky.addColorStop(0,'#4b2a7a'); sky.addColorStop(.45,'#7f5bb5'); sky.addColorStop(.75,'#2fa3c9'); sky.addColorStop(1,'#f6e3b4');
+  g.fillStyle = sky; g.fillRect(0,0,vw,vh);
+  g.fillStyle = 'rgba(255,255,255,.12)';
+  for(let i=0;i<18;i++){
+    const x = (i*173 + Math.sin(L.t + i)*20) % vw;
+    g.beginPath(); g.arc(x, vh*0.5 + Math.cos(L.t*.7 + i)*40, 10 + (i%3)*6, 0, Math.PI*2); g.fill();
+  }
+
+  // Ursula, big and cross, swinging the trident she stole
+  const u = L.ursula;
+  const ux = u.x + Math.sin(u.t*0.8)*70;
+  drawEmoji(g, '🐙', ux, u.y, 150, { filter:'hue-rotate(250deg)' });
+  drawEmoji(g, '🔱', ux + 82, u.y + 20, 60, { rot: Math.sin(u.t*3)*0.3 });
+
+  // Eric behind the wall
+  drawEmoji(g, '🤴', L.eric.x, L.eric.y, 76);
+  drawEmoji(g, '🛟', L.eric.x + 60, L.eric.y + 10, 40, { alpha:.8 });
+
+  // the sisters, holding on to each other
+  g.strokeStyle = 'rgba(255,143,177,.8)'; g.lineWidth = 8; g.lineCap = 'round';
+  g.beginPath();
+  L.sisters.forEach((s,i) => { if(i===0) g.moveTo(s.x, s.y+16); else g.lineTo(s.x, s.y+16); });
+  g.stroke();
+  const sisterSize = Math.min(58, (L.gap || 110) * 0.92);
+  // a ring under whichever sister a zap is heading for: the target has to be
+  // obvious at a glance, or a small child cannot play this at all
+  L.zaps.forEach(z => {
+    const s = L.sisters[z.lane], p = z.t/z.dur;
+    g.save();
+    g.globalAlpha = .25 + p*0.45;
+    g.strokeStyle = '#ffd54f'; g.lineWidth = 6;
+    g.beginPath(); g.arc(s.x, s.y, 38 + (1-p)*22, 0, Math.PI*2); g.stroke();
+    g.restore();
+  });
+  L.sisters.forEach((s,i) => {
+    if(s.glow > 0){
+      g.save(); g.globalAlpha = Math.min(1, s.glow);
+      g.fillStyle = '#ffd54f';
+      g.beginPath(); g.arc(s.x, s.y, 58, 0, Math.PI*2); g.fill();
+      g.restore();
+      drawEmoji(g, '🛡️', s.x, s.y - 52, 44, { alpha: Math.min(1, s.glow) });
+    }
+    drawEmoji(g, '🧜‍♀️', s.x, s.y + Math.sin(s.bob)*5, sisterSize, { flip: i < L.sisters.length/2 ? -1 : 1 });
+    if(i % 2 === 0) drawEmoji(g, '💗', s.x + sisterSize*0.5, s.y + 24, 18, { alpha:.6 });
+  });
+
+  // zaps travelling down their lane
+  L.zaps.forEach(z => {
+    const s = L.sisters[z.lane];
+    const p = z.t/z.dur;
+    const x = ux + (s.x - ux)*p, y = (L.ursula.y + 70) + (s.y - L.ursula.y - 70)*p;
+    drawEmoji(g, '🟣', x, y, 40 + Math.sin(L.t*20)*4);
+    drawEmoji(g, '⬇️', s.x, s.y - 78, 28, { alpha:.35 + p*0.5 });
+  });
+  drawParts(g, 0, 0);
+}
+
+/* ---------------- The loop ------------------------------------------ */
+function update(dt){
+  if(!L) return;
+  L.t += dt;
+  if(L.kind === 'swim')   updateSwim(dt);
+  if(L.kind === 'walk')   updateWalk(dt);
+  if(L.kind === 'shield') updateShield(dt);
+  updateParts(dt);
+}
+function draw(){
+  if(!L) return;
+  ctx.clearRect(0,0,vw,vh);
+  if(L.kind === 'swim')   drawSwim();
+  if(L.kind === 'walk')   drawWalk();
+  if(L.kind === 'shield') drawShield();
+}
+function frame(now){
+  rafId = requestAnimationFrame(frame);
+  if(!lastT) lastT = now;
+  const dt = Math.min(0.05, (now - lastT)/1000);
+  lastT = now;
+  update(dt);
+  draw();
+}
+function startLoop(){ if(rafId) return; lastT = 0; rafId = requestAnimationFrame(frame); }
+function stopLoop(){ if(rafId){ cancelAnimationFrame(rafId); rafId = 0; } }
+
+/* ==================================================================== *
+ * The ending — everybody hugs, and then you clap three times.
+ * ==================================================================== */
+const HUG_CAST = ['🧜‍♀️','👧','👧','👧','👧','👧','👧','🤴','🔱','🦀','🐠'];
+let claps = 0;
+function startFinale(){
+  setPlaying(false);
+  claps = 0;
+  document.getElementById('finTitle').textContent = 'Everybody hug!';
+  document.getElementById('finHug').innerHTML = HUG_CAST.map(c => '<span>' + c + '</span>').join('');
+  document.getElementById('finText').textContent =
+    'Ariel, her six sisters, Prince Eric and King Triton all squeezed into one big hug. Now clap three times! 👏';
+  document.getElementById('clapRow').innerHTML = '<span>👏</span><span>👏</span><span>👏</span>';
+  document.getElementById('clapBtn').hidden = false;
+  document.getElementById('finAgain').hidden = true;
+  document.getElementById('finHome').hidden = true;
+  showScreen('finale', 'dark');
+  SFX.cheer();
+  speak('Everybody hug! Now clap three times. Clap, clap, clap!', { rate:0.92 });
+  cleared = 6; unlocked = 6;
+  Store.set('ariel_cleared','6'); Store.set('ariel_unlocked','6');
+}
+document.getElementById('clapBtn').addEventListener('click', () => {
+  const row = document.getElementById('clapRow');
+  if(claps >= 3) return;
+  SFX.clap();
+  row.children[claps].classList.add('on');
+  claps++;
+  if(claps === 3){
+    SFX.cheer();
+    document.getElementById('finTitle').textContent = 'GO ARIEL! GO ARIEL!';
+    document.getElementById('finHug').innerHTML =
+      ['🎉', ...HUG_CAST, '🎉'].map(c => '<span>' + c + '</span>').join('');
+    document.getElementById('finText').textContent =
+      'Ursula is gone for good, King Triton has his trident back, and Ariel has her voice — in English AND in Spanish. The end. 💗';
+    document.getElementById('clapBtn').hidden = true;
+    document.getElementById('finAgain').hidden = false;
+    document.getElementById('finHome').hidden = false;
+    speak('Go Ariel! Go Ariel! The end!', { rate:0.95, pitch:1.4 });
+  }
+});
+document.getElementById('finAgain').addEventListener('click', () => {
+  SFX.pop(); collectedWords = []; startChapter(0);
+});
+document.getElementById('finHome').addEventListener('click', () => { SFX.pop(); goHome(); });
+
+/* ==================================================================== *
+ * Buttons and boot
+ * ==================================================================== */
+function syncSoundButtons(){
+  const label = soundOn ? '🔊' : '🔇';
+  document.getElementById('soundBtn').textContent = label;
+  document.getElementById('soundBtnHome').textContent = label;
+}
+function toggleSound(){
+  soundOn = !soundOn;
+  Store.set('ariel_sound', soundOn ? 'on' : 'off');
+  if(!soundOn) stopSpeaking();
+  syncSoundButtons();
+  if(soundOn){ ensureAudio(); SFX.chime(); }
+}
+document.getElementById('soundBtn').addEventListener('click', toggleSound);
+document.getElementById('soundBtnHome').addEventListener('click', toggleSound);
+document.getElementById('homeBtn').addEventListener('click', () => { SFX.pop(); goHome(); });
+document.getElementById('winHome').addEventListener('click', () => { SFX.pop(); goHome(); });
+document.getElementById('winNext').addEventListener('click', () => { SFX.pop(); nextChapter(); });
+
+document.getElementById('playBtn').addEventListener('click', () => {
+  ensureAudio(); SFX.pop();
+  // "Play" picks up at the first level that has not been finished yet.
+  const next = LEVELS.find(l => l.n > cleared) || LEVELS[0];
+  if(next.n === 1) collectedWords = [];
+  startChapter(next.start);
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  cleared = 0; unlocked = 1; collectedWords = [];
+  Store.set('ariel_cleared','0'); Store.set('ariel_unlocked','1');
+  renderMap();
+  SFX.chime();
+  toast('🔄', 'Story reset!', 'Start again from level 1.');
+});
+
+/* Walking buttons: hold to walk, tap to jump. */
+function holdBtn(id, set){
+  const el = document.getElementById(id);
+  const on = (e)=>{ e.preventDefault(); ensureAudio(); set(true); };
+  const off = (e)=>{ e.preventDefault(); set(false); };
+  el.addEventListener('pointerdown', on);
+  el.addEventListener('pointerup', off);
+  el.addEventListener('pointercancel', off);
+  el.addEventListener('pointerleave', off);
+}
+holdBtn('leftBtn',  v => { if(L) L.holdLeft = v; });
+holdBtn('rightBtn', v => { if(L) L.holdRight = v; });
+document.getElementById('jumpBtn').addEventListener('pointerdown', (e) => {
+  e.preventDefault(); ensureAudio(); walkJump();
+});
+
+renderMap();
+syncSoundButtons();
+showScreen('home');
+</script>
+</body>
+</html>
