@@ -1,0 +1,2611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Gabby's Christmas Ice Cube Rescue</title>
+<style>
+  :root{
+    --pink:#ff7cbd; --pink2:#ff5fa8; --lilac:#c9a6ff; --purple:#8a5cf0; --gold:#ffd54f;
+    --ice:#bfe9ff; --mint:#7fe0cf;
+    --ink:#4a2f63; --card:#fffdfb;
+    --shadow:0 10px 0 rgba(0,0,0,.07), 0 18px 40px rgba(110,60,150,.20);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  [hidden]{display:none !important;}
+  html,body{height:100%; margin:0;}
+  body{
+    font-family:'Comic Sans MS','Baloo 2','Trebuchet MS',system-ui,sans-serif;
+    color:var(--ink);
+    background:linear-gradient(180deg,#ffe3f2 0%, #f1dcff 55%, #d9c8ff 100%);
+    overflow:hidden; user-select:none; touch-action:none;
+  }
+
+  /* The playfield: every hands-on level draws into this one canvas. */
+  #stage{position:fixed; inset:0; width:100%; height:100%; display:none; z-index:1; touch-action:none;}
+  body.playing #stage{display:block;}
+
+  .topbar{position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    align-items:center; padding:12px 16px; z-index:5; pointer-events:none;
+    padding-top:calc(12px + env(safe-area-inset-top)); gap:10px;}
+  .topbar > *{pointer-events:auto;}
+  .roundbtn{border:none; cursor:pointer; width:62px; height:62px; border-radius:50%;
+    background:var(--card); box-shadow:var(--shadow); font-size:28px; display:grid; place-items:center;
+    transition:transform .12s; font-family:inherit; flex:none; color:var(--ink);}
+  .roundbtn:active{transform:scale(.9);}
+  .badge{background:var(--card); box-shadow:var(--shadow); border-radius:30px; padding:6px 18px 6px 8px;
+    font-size:clamp(16px,3.8vw,23px); font-weight:bold; display:flex; align-items:center; gap:8px;
+    color:var(--ink); white-space:nowrap; max-width:calc(100vw - 170px); overflow:hidden;}
+  .badge canvas{width:40px; height:40px; flex:none;}
+  #hud{display:none;}
+  body.playing #hud{display:block;}
+
+  .padrow{position:fixed; left:0; right:0; bottom:calc(18px + env(safe-area-inset-bottom));
+    display:none; justify-content:space-between; padding:0 18px; z-index:5;}
+  body.driving .padrow{display:flex;}
+  .padrow .left{display:flex; gap:14px;}
+  .padbtn{width:84px; height:84px; font-size:38px;}
+  .jumpbtn{background:linear-gradient(180deg,#ffd9ec,#ff9ccc);}
+
+  /* Screens */
+  .screen{position:fixed; inset:0; z-index:4; display:none; flex-direction:column;
+    align-items:center; justify-content:flex-start; text-align:center;
+    overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:linear-gradient(180deg,#ffe3f2 0%, #f1dcff 55%, #d9c8ff 100%);}
+  .screen.active{display:flex; animation:pop .4s ease both;}
+  .screen.night{background:linear-gradient(180deg,#5b2f9a 0%, #2b1660 60%, #140a33 100%);}
+  .screen.ice{background:linear-gradient(180deg,#e6f7ff 0%, #c4e9ff 55%, #a9d8ff 100%);}
+  .sheet{margin:auto; display:flex; flex-direction:column; align-items:center; gap:14px;
+    width:100%; padding:calc(20px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));}
+  @keyframes pop{from{opacity:0; transform:scale(.95) translateY(10px);}to{opacity:1; transform:none;}}
+
+  h1{font-size:clamp(28px,7vw,54px); margin:0; padding:0 4px; color:#fff; line-height:1.05;
+     text-shadow:0 3px 0 var(--pink2), 0 6px 0 var(--purple), 0 10px 18px rgba(0,0,0,.25);
+     letter-spacing:1px;}
+  h2{font-size:clamp(22px,5.4vw,36px); margin:0; color:#fff;
+     text-shadow:0 3px 0 var(--pink2), 0 6px 14px rgba(0,0,0,.2);}
+  .subtitle{font-size:clamp(15px,3.4vw,21px); color:#4a2f63; background:#ffffffde;
+     padding:8px 18px; border-radius:30px; box-shadow:var(--shadow); max-width:min(580px,92vw); line-height:1.4;}
+
+  .bigbtn{
+    border:none; cursor:pointer; color:#fff; font-family:inherit; font-weight:bold;
+    font-size:clamp(20px,4.6vw,30px); padding:18px 30px; border-radius:28px;
+    box-shadow:var(--shadow); display:flex; align-items:center; gap:12px; min-width:240px;
+    justify-content:center; transition:transform .12s ease, filter .12s ease;
+    background:linear-gradient(180deg,#ff9ccc,#ff5fa8);
+  }
+  .bigbtn:active{transform:translateY(4px) scale(.98); filter:brightness(1.06);}
+  .bigbtn.gold{background:linear-gradient(180deg,#ffe08a,#ffb43f); color:#5a3c00;}
+  .arrow{font-size:1.1em;}
+
+  .how{background:#ffffffe8; border-radius:28px; box-shadow:var(--shadow); padding:14px 20px;
+    max-width:min(580px,94vw); font-size:clamp(14px,3.2vw,18px); color:#4a2f63; line-height:1.5; text-align:left;}
+  .how b{color:#a0459a;}
+  .how p{margin:6px 0;}
+
+  /* Drawn scenes (story, home, win, finale) */
+  .scene{width:min(680px,96vw); height:clamp(190px,34vh,290px); border-radius:28px;
+    box-shadow:var(--shadow); background:#fff; display:block;}
+  .scene.tall{height:clamp(220px,40vh,340px);}
+
+  /* Home: the level map */
+  .map{display:flex; flex-wrap:wrap; gap:12px; justify-content:center; max-width:min(640px,96vw);}
+  .lvl{width:150px; border:none; font-family:inherit; cursor:pointer; color:var(--ink);
+    background:var(--card); border-radius:24px; box-shadow:var(--shadow); padding:10px 8px 12px;
+    display:flex; flex-direction:column; align-items:center; gap:2px; transition:transform .12s;}
+  .lvl:active{transform:scale(.96);}
+  .lvl canvas{width:76px; height:76px;}
+  .lvl .n{font-size:14px; font-weight:bold; color:#a07bc0;}
+  .lvl .t{font-size:16px; font-weight:bold; line-height:1.2;}
+  .lvl .star{font-size:14px; height:20px; color:#c08a00; font-weight:bold;}
+  .lvl.locked{opacity:.5; filter:grayscale(.7);}
+
+  .bubble{background:#fff; border-radius:26px; box-shadow:var(--shadow); padding:14px 22px;
+    max-width:min(600px,94vw); font-size:clamp(17px,4vw,24px); line-height:1.45; color:#4a2f63;}
+  .bubble .who{display:block; font-size:15px; font-weight:bold; color:#c0509a; margin-bottom:4px;}
+  .minirow{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .minibtn{border:none; font-family:inherit; cursor:pointer; background:var(--card); color:#7a4e98;
+    border-radius:24px; box-shadow:var(--shadow); padding:10px 18px; font-size:16px; font-weight:bold;}
+  .minibtn:active{transform:scale(.95);}
+
+  /* Spa science */
+  .scicard{background:#fff; border-radius:30px; box-shadow:var(--shadow); padding:12px;
+    display:flex; flex-direction:column; align-items:center; gap:8px; width:min(560px,94vw);}
+  .scicard canvas{width:100%; height:clamp(170px,28vh,240px); display:block;}
+  .scicard .q{font-size:clamp(18px,4.2vw,25px); font-weight:bold; color:#6a3fa0; line-height:1.35; padding:0 6px;}
+  .choices{display:flex; flex-wrap:wrap; gap:12px; justify-content:center; max-width:min(600px,94vw);}
+  .choice{border:none; font-family:inherit; cursor:pointer; color:#fff;
+    border-radius:26px; box-shadow:var(--shadow); padding:16px 20px; min-width:min(260px,80vw);
+    font-size:clamp(19px,4.4vw,25px); font-weight:bold; transition:transform .12s, opacity .3s;}
+  .choice.warm{background:linear-gradient(180deg,#ffb36b,#ff6f4f);}
+  .choice.cold{background:linear-gradient(180deg,#8fd6ff,#3d9df0);}
+  .choice.plain{background:linear-gradient(180deg,#d9b8ff,#9a6af0);}
+  .choice:active{transform:scale(.96);}
+  .choice.right{box-shadow:0 0 0 7px #8be36a, var(--shadow);}
+  .choice.wrong{animation:shake .4s;}
+  .choice.gone{opacity:.25; pointer-events:none;}
+  @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-9px);}75%{transform:translateX(9px);}}
+  .dots{display:flex; gap:8px;}
+  .dots span{width:22px; height:22px; border-radius:50%; background:#fff; opacity:.5; box-shadow:0 2px 0 rgba(0,0,0,.1);}
+  .dots span.on{opacity:1; background:radial-gradient(circle at 35% 35%,#fff 0 18%,#ffe27a 20%,#ffb43f 100%);
+    animation:pop .4s cubic-bezier(.34,1.56,.64,1) both;}
+  .why{background:#fff6d6; border:4px dashed #ffc94f; border-radius:22px; padding:10px 18px;
+    max-width:min(560px,94vw); font-size:clamp(16px,3.6vw,21px); color:#6a4a00; line-height:1.4;}
+
+  /* Finale */
+  .clapbtn{border:none; cursor:pointer; font-family:inherit; font-weight:bold; color:#fff;
+    font-size:clamp(28px,7vw,44px); padding:18px 44px; border-radius:50px;
+    background:radial-gradient(circle at 40% 30%,#ffb3d9,#ff4f9e); box-shadow:var(--shadow);
+    transition:transform .1s;}
+  .clapbtn:active{transform:scale(.88) rotate(-4deg);}
+  .claprow{display:flex; gap:12px;}
+  .claprow span{width:30px; height:30px; border-radius:50%; background:#ffffff55;}
+  .claprow span.on{background:radial-gradient(circle at 35% 35%,#fff 0 18%,#ffe27a 20%,#ffb43f 100%);
+    animation:pop .3s cubic-bezier(.34,1.56,.64,1) both;}
+
+  .homesound{position:fixed; top:calc(12px + env(safe-area-inset-top)); right:16px; z-index:6;}
+  #home h1{padding:0 72px;}
+  footer{font-size:13px; opacity:.85; color:#6a3f8a;}
+
+  #toast{position:fixed; left:0; right:0; top:calc(84px + env(safe-area-inset-top)); z-index:20;
+    display:flex; justify-content:center; pointer-events:none; padding:0 14px;}
+  #toast .inner{background:#fff; border-radius:26px; box-shadow:var(--shadow); padding:8px 18px 8px 10px;
+    display:none; align-items:center; gap:10px; border:4px solid var(--gold); max-width:94vw; text-align:left;}
+  #toast.show .inner{display:flex; animation:pop .4s cubic-bezier(.34,1.56,.64,1) both;}
+  #toast canvas{width:52px; height:52px; flex:none;}
+  #toast .t1{font-weight:bold; color:#8a3fa0; font-size:18px;}
+  #toast .t2{color:#8a6bb0; font-size:14px;}
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div id="hud">
+  <div class="topbar">
+    <button class="roundbtn" id="homeBtn" data-testid="home" title="Back to the map">⌂</button>
+    <div class="badge" id="goalBadge"><canvas id="goalIcon" width="80" height="80"></canvas><span id="goalText">0 / 8</span></div>
+    <button class="roundbtn" id="soundBtn" data-testid="sound" title="Sound on and off">🔊</button>
+  </div>
+  <div class="padrow">
+    <div class="left">
+      <button class="roundbtn padbtn" id="leftBtn" data-testid="drive-left" title="Back up">◀</button>
+      <button class="roundbtn padbtn" id="rightBtn" data-testid="drive-right" title="Drive">▶</button>
+    </div>
+    <button class="roundbtn padbtn jumpbtn" id="jumpBtn" data-testid="jump" title="Jump">⤴</button>
+  </div>
+</div>
+
+<div id="toast"><div class="inner"><canvas id="toastIcon" width="104" height="104"></canvas>
+  <div><div class="t1" id="toastT1"></div><div class="t2" id="toastT2"></div></div></div></div>
+
+<!-- ============================ HOME ============================ -->
+<section class="screen active" id="home">
+  <button class="roundbtn homesound" id="soundBtnHome" data-testid="sound-home" title="Sound on and off">🔊</button>
+  <div class="sheet">
+    <h1>Gabby's Christmas<br>Ice Cube Rescue</h1>
+    <canvas class="scene" id="homeScene"></canvas>
+    <div class="subtitle">CatRat and Pete the polar bear are frozen in a giant ice cube! Help Gabby save them.</div>
+    <div class="map" id="levelMap"></div>
+    <button class="bigbtn" id="playBtn" data-testid="play"><span class="arrow">▶</span> Play</button>
+    <div class="how">
+      <p><b>Every level is different.</b> You'll search, sort, drive, think, swim and melt.</p>
+      <p><b>Everything is read out loud.</b> Tap <b>Say it again</b> to hear it one more time.</p>
+      <p><b>Nobody can lose.</b> Bumps just make you spin, and wrong answers cost nothing.</p>
+    </div>
+    <button class="minibtn" id="resetBtn" data-testid="reset">Start the story over</button>
+    <footer>Story by a five-year-old who loves Gabby's Dollhouse.</footer>
+  </div>
+</section>
+
+<!-- ============================ STORY ============================ -->
+<section class="screen" id="story">
+  <div class="sheet">
+    <canvas class="scene tall" id="storyScene"></canvas>
+    <div class="bubble"><span class="who" id="storyWho"></span><span id="storyText"></span></div>
+    <div class="minirow">
+      <button class="minibtn" id="storyHearBtn" data-testid="story-hear">🔊 Say it again</button>
+    </div>
+    <button class="bigbtn" id="storyNext" data-testid="story-next">Next <span class="arrow">▶</span></button>
+  </div>
+</section>
+
+<!-- ========================== SCIENCE ========================== -->
+<section class="screen ice" id="science">
+  <div class="sheet">
+    <h2 id="sciTitle">MerCat's Spa Science</h2>
+    <div class="dots" id="sciDots"></div>
+    <div class="scicard">
+      <canvas id="sciCanvas"></canvas>
+      <div class="q" id="sciQ"></div>
+    </div>
+    <div class="choices" id="sciChoices"></div>
+    <div class="why" id="sciWhy" hidden></div>
+    <button class="bigbtn gold" id="sciNext" hidden data-testid="sci-next">Next <span class="arrow">▶</span></button>
+    <div class="minirow">
+      <button class="minibtn" id="sciHint" data-testid="hint">💡 Hint</button>
+      <button class="minibtn" id="sciSay" data-testid="say-again">🔊 Say it again</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================= WIN ============================= -->
+<section class="screen" id="win">
+  <div class="sheet">
+    <canvas class="scene" id="winScene"></canvas>
+    <h2 id="winTitle">Level done!</h2>
+    <div class="subtitle" id="winText"></div>
+    <button class="bigbtn gold" id="winNext" data-testid="win-next"><span class="arrow">▶</span> Keep going</button>
+    <button class="minibtn" id="winHome">⌂ Back to the map</button>
+  </div>
+</section>
+
+<!-- ============================ FINALE =========================== -->
+<section class="screen night" id="finale">
+  <div class="sheet">
+    <h1 id="finTitle">Christmas party!</h1>
+    <canvas class="scene tall" id="finScene"></canvas>
+    <div class="subtitle" id="finText"></div>
+    <button class="clapbtn" id="clapBtn" data-testid="clap">Clap!</button>
+    <div class="claprow" id="clapRow"><span></span><span></span><span></span></div>
+    <button class="bigbtn gold" id="finAgain" hidden data-testid="play-again">Play again</button>
+    <button class="minibtn" id="finHome" hidden>⌂ Back to the map</button>
+  </div>
+</section>
+
+<script>
+/* ==================================================================== *
+ * Gabby's Christmas Ice Cube Rescue
+ *
+ * A six-level story game. On Christmas Eve, CatRat and Pete the polar
+ * bear freeze into a giant ice cube that floats off into MerCat's
+ * ice-cold pool. Gabby has to find her magic cat ears and fix her
+ * rainbow bracelet, get snorkels from the grocery store, learn some
+ * spa science from MerCat, swim the pool as a mermaid and melt the ice.
+ *
+ * The lesson running through it: warm melts ice, cold keeps it frozen,
+ * water freezes into ice, and ice floats. Plus rainbow order and
+ * counting along the way.
+ *
+ * One file, no build step, no network, no images: every character is
+ * drawn with canvas paths in the ART table below.
+ * ==================================================================== */
+
+/* ---------------- Storage (wrapped: file:// can throw) ---------------- */
+const Store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+
+/* ---------------- Sound: WebAudio tones ----------------------------- */
+let soundOn = Store.get('gabby_sound') !== 'off';
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tone(freq, start, dur, type='sine', vol=0.18){
+  if(!soundOn || !audioCtx) return;
+  const t0 = audioCtx.currentTime + start;
+  const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+function slide(f1, f2, start, dur, type='sine', vol=0.16){
+  if(!soundOn || !audioCtx) return;
+  const t0 = audioCtx.currentTime + start;
+  const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(f1, t0);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20,f2), t0 + dur);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+const SFX = {
+  pop(){   ensureAudio(); tone(520,0,0.12,'triangle',0.14); },
+  chime(){ ensureAudio(); tone(880,0,0.10,'sine',0.13); tone(1320,0.06,0.14,'sine',0.10); },
+  jump(){  ensureAudio(); slide(380,760,0,0.16,'sine',0.10); },
+  land(){  ensureAudio(); tone(190,0,0.09,'triangle',0.09); },
+  bonk(){  ensureAudio(); tone(200,0,0.16,'square',0.09); tone(150,0.10,0.20,'sine',0.10); },
+  sparkle(){ensureAudio(); [784,1046,1318].forEach((f,i)=>tone(f,i*0.05,0.18,'sine',0.11)); },
+  magic(){ ensureAudio(); [523,659,784,1046,1318,1568,2093].forEach((f,i)=>tone(f,i*0.06,0.35,'sine',0.10)); },
+  cheer(){ ensureAudio(); [392,523,659,784,1046,1318].forEach((f,i)=>tone(f,i*0.08,0.25,'triangle',0.15)); },
+  clap(){  ensureAudio(); slide(1800,400,0,0.10,'sawtooth',0.10); tone(240,0,0.07,'square',0.08); },
+  wrong(){ ensureAudio(); tone(330,0,0.12,'triangle',0.10); tone(262,0.11,0.20,'triangle',0.10); },
+  plop(){  ensureAudio(); slide(900,160,0,0.22,'sine',0.18); tone(120,0.18,0.25,'sine',0.10); },
+  drip(){  ensureAudio(); slide(1400,600,0,0.10,'sine',0.12); },
+  crack(){ ensureAudio(); slide(2000,200,0,0.18,'sawtooth',0.08); tone(90,0.05,0.3,'square',0.07); },
+  brr(){   ensureAudio(); for(let i=0;i<6;i++) tone(300 + (i%2)*40, i*0.05, 0.05,'square',0.05); },
+  beep(){  ensureAudio(); tone(660,0,0.1,'square',0.08); tone(660,0.16,0.12,'square',0.08); },
+  swoosh(){ensureAudio(); slide(900,320,0,0.14,'sawtooth',0.06); }
+};
+
+/* ---------------- Speech: one voice per character -------------------- */
+const VOICE = {
+  story:    { pitch:1.1,  rate:0.92 },
+  gabby:    { pitch:1.45, rate:1.0 },
+  pandy:    { pitch:1.2,  rate:0.95 },
+  catrat:   { pitch:1.85, rate:1.1 },
+  carlita:  { pitch:1.55, rate:1.05 },
+  djcatnip: { pitch:1.0,  rate:1.05 },
+  mercat:   { pitch:1.6,  rate:1.0 },
+  babybox:  { pitch:1.8,  rate:1.0 },
+  cakey:    { pitch:1.7,  rate:1.08 },
+  pillowcat:{ pitch:1.2,  rate:0.8 },
+  santa:    { pitch:0.6,  rate:0.85 },
+  pete:     { pitch:0.7,  rate:0.9 }
+};
+const NAMES = {
+  story:'The story', gabby:'Gabby', pandy:'Pandy Paws', catrat:'CatRat', carlita:'Carlita',
+  djcatnip:'DJ Catnip', mercat:'MerCat', babybox:'Baby Box', cakey:'Cakey', pillowcat:'Pillow Cat',
+  santa:'Santa', pete:'Pete the polar bear'
+};
+function speak(text, {rate=0.95, pitch=1.25}={}){
+  if(!soundOn || !('speechSynthesis' in window)) return;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = rate; u.pitch = pitch; u.volume = 1; u.lang = 'en-US';
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function speakAs(who, text){ speak(text, VOICE[who] || VOICE.story); }
+function stopSpeaking(){
+  if(!('speechSynthesis' in window)) return;
+  try{
+    speechSynthesis.cancel();
+    setTimeout(()=>{ try{ speechSynthesis.cancel(); }catch(e){} }, 50);
+  }catch(e){}
+}
+if('speechSynthesis' in window){ try{ speechSynthesis.getVoices(); }catch(e){} }
+
+/* ---------------- Little helpers ------------------------------------ */
+const TAU = Math.PI*2;
+const rand = (a,b)=> a + Math.random()*(b-a);
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const dist2 = (x1,y1,x2,y2)=>{ const dx=x1-x2, dy=y1-y2; return dx*dx+dy*dy; };
+const now = ()=> performance.now()/1000;
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function roundBox(g, x, y, w, h, r){
+  // ctx.roundRect is too new for older iPads, so draw the box by hand.
+  const rr = Math.max(0, Math.min(r, w/2, h/2));
+  g.beginPath();
+  g.moveTo(x+rr, y);
+  g.arcTo(x+w, y,   x+w, y+h, rr);
+  g.arcTo(x+w, y+h, x,   y+h, rr);
+  g.arcTo(x,   y+h, x,   y,   rr);
+  g.arcTo(x,   y,   x+w, y,   rr);
+  g.closePath();
+}
+
+/* ==================================================================== *
+ * THE ART. Every character and prop is a function that draws itself
+ * into a 100-unit box centred on (0,0), roughly y -55 (top) to +50
+ * (feet). drawArt() scales it to whatever size the scene needs.
+ * Soft outlines, round shapes, blinking eyes: cartoon style, no images.
+ * ==================================================================== */
+const OUT = '#4a2f5e';
+function fillStroke(g, fill, w){
+  if(fill){ g.fillStyle = fill; g.fill(); }
+  if(w !== 0){ g.lineWidth = w || 2.4; g.strokeStyle = OUT; g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke(); }
+}
+function circ(g,x,y,r,fill,w){ g.beginPath(); g.arc(x,y,r,0,TAU); fillStroke(g,fill,w); }
+function ell(g,x,y,rx,ry,rot,fill,w){ g.beginPath(); g.ellipse(x,y,rx,ry,rot||0,0,TAU); fillStroke(g,fill,w); }
+function rrect(g,x,y,w,h,r,fill,sw){ roundBox(g,x,y,w,h,r); fillStroke(g,fill,sw); }
+function shape(g, pts, fill, w){
+  g.beginPath(); g.moveTo(pts[0],pts[1]);
+  for(let i=2;i<pts.length;i+=2) g.lineTo(pts[i],pts[i+1]);
+  g.closePath(); fillStroke(g,fill,w);
+}
+/* A closed curve that runs smoothly through the midpoints of pts. */
+function smooth(g, pts, fill, w){
+  const n = pts.length/2;
+  const mx = i => (pts[(i%n)*2] + pts[((i+1)%n)*2]) / 2;
+  const my = i => (pts[(i%n)*2+1] + pts[((i+1)%n)*2+1]) / 2;
+  g.beginPath(); g.moveTo(mx(0), my(0));
+  for(let i=1;i<=n;i++){ const k = i%n; g.quadraticCurveTo(pts[k*2], pts[k*2+1], mx(i), my(i)); }
+  g.closePath(); fillStroke(g,fill,w);
+}
+function line(g, x1,y1,x2,y2, col, w){
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2);
+  g.strokeStyle = col || OUT; g.lineWidth = w || 2.4; g.lineCap = 'round'; g.stroke();
+}
+/* A thick limb: dark outline first, then the colour on top. */
+function limb(g, x1,y1,x2,y2, col, w){
+  line(g,x1,y1,x2,y2,OUT,w+4.5); line(g,x1,y1,x2,y2,col,w);
+}
+function shine(g,x,y,r){ g.fillStyle='rgba(255,255,255,.6)'; g.beginPath(); g.ellipse(x,y,r,r*0.6,-0.6,0,TAU); g.fill(); }
+function blinkK(t, ph){ const k = (t*0.27 + (ph||0)) % 1; return k < 0.03 ? 0.1 : 1; }
+function eye(g,x,y,r,t,ph,iris){
+  g.save(); g.translate(x,y); g.scale(1, blinkK(t,ph));
+  ell(g,0,0,r*0.85,r,0,'#fff',1.6);
+  circ(g,0,r*0.18,r*0.64,iris||'#4a2a55',0);
+  circ(g,0,r*0.22,r*0.34,'#1b0f24',0);
+  circ(g,-r*0.24,-r*0.12,r*0.24,'#fff',0);
+  g.restore();
+}
+function closedEye(g,x,y,r){ g.beginPath(); g.arc(x,y-r*0.3,r,0.15*Math.PI,0.85*Math.PI); g.lineWidth=2.4; g.strokeStyle=OUT; g.lineCap='round'; g.stroke(); }
+function smile(g,x,y,w,open){
+  if(open){
+    g.beginPath(); g.moveTo(x-w,y); g.quadraticCurveTo(x,y+w*1.5,x+w,y); g.closePath();
+    fillStroke(g,'#c63d6e',2);
+    g.fillStyle='#ff8fb0'; g.beginPath(); g.ellipse(x,y+w*0.55,w*0.45,w*0.22,0,0,TAU); g.fill();
+  } else {
+    g.beginPath(); g.arc(x,y-w*0.5,w,0.22*Math.PI,0.78*Math.PI);
+    g.lineWidth=2.2; g.strokeStyle=OUT; g.lineCap='round'; g.stroke();
+  }
+}
+function blush(g,x,y,r){ g.fillStyle='rgba(255,110,150,.4)'; g.beginPath(); g.ellipse(x,y,r||4.5,(r||4.5)*0.6,0,0,TAU); g.fill(); }
+function catEar(g,x,y,w,h,tilt,fill,inner){
+  g.save(); g.translate(x,y); g.rotate(tilt);
+  g.beginPath(); g.moveTo(-w/2,2); g.quadraticCurveTo(-w*0.2,-h*0.7,0,-h); g.quadraticCurveTo(w*0.2,-h*0.7,w/2,2); g.closePath();
+  fillStroke(g,fill,2.4);
+  if(inner){ g.beginPath(); g.moveTo(-w/4,0); g.quadraticCurveTo(-w*0.1,-h*0.5,0,-h*0.66); g.quadraticCurveTo(w*0.1,-h*0.5,w/4,0); g.closePath(); fillStroke(g,inner,0); }
+  g.restore();
+}
+function whiskers(g,x,y,len){
+  g.strokeStyle = OUT; g.lineWidth = 1.4; g.lineCap = 'round';
+  [-1,1].forEach(s => {
+    g.beginPath(); g.moveTo(x+s*4,y); g.lineTo(x+s*(4+len),y-3); g.stroke();
+    g.beginPath(); g.moveTo(x+s*4,y+3); g.lineTo(x+s*(4+len),y+4); g.stroke();
+  });
+}
+function star(g,x,y,r,fill,w,points){
+  const n = points || 5;
+  g.beginPath();
+  for(let i=0;i<n*2;i++){
+    const a = -Math.PI/2 + i*Math.PI/n, rr = i%2 ? r*0.48 : r;
+    const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr;
+    if(i) g.lineTo(px,py); else g.moveTo(px,py);
+  }
+  g.closePath(); fillStroke(g, fill, w);
+}
+function twinkle(g,x,y,r,col){
+  g.fillStyle = col || '#fff';
+  g.beginPath();
+  g.moveTo(x,y-r); g.quadraticCurveTo(x,y,x+r,y); g.quadraticCurveTo(x,y,x,y+r);
+  g.quadraticCurveTo(x,y,x-r,y); g.quadraticCurveTo(x,y,x,y-r); g.fill();
+}
+function mermaidTail(g, y0, len, hw, col, fin, t){
+  const sw = Math.sin(t*4)*6;
+  const ex = sw, ey = y0 + len;
+  g.beginPath();
+  g.moveTo(-hw, y0);
+  g.quadraticCurveTo(-hw*1.1, y0+len*0.6, ex-3, ey);
+  g.lineTo(ex+3, ey);
+  g.quadraticCurveTo(hw*1.1, y0+len*0.6, hw, y0);
+  g.closePath(); fillStroke(g, col, 2.4);
+  g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1.5;
+  for(let r=0;r<3;r++) for(let c=-1;c<=1;c++){
+    const k = 1 - r*0.28;
+    g.beginPath(); g.arc(c*7*k + sw*r/5, y0+8+r*9, 3.4, 0, Math.PI); g.stroke();
+  }
+  g.save(); g.translate(ex, ey); g.rotate(sw*0.03);
+  ell(g,-9,5,12,6,0.55,fin); ell(g,9,5,12,6,-0.55,fin);
+  g.restore();
+}
+function snorkel(g, y, w){
+  // a mask across the eyes and a tube up the side
+  limb(g, w*0.85, y-2, w*0.95, y-28, '#ffd23f', 3.5);
+  rrect(g, w*0.8, y-34, 8, 7, 3, '#ff8a3d', 2);
+  rrect(g, -w, y-7, w*2, 14, 7, 'rgba(140,215,255,.55)', 2.4);
+  line(g, -w*0.98, y, -w*1.3, y, OUT, 3);
+  shine(g, -w*0.5, y-2, 3);
+}
+
+const RAINBOW = [
+  { n:'red',    c:'#ff4d5e' }, { n:'orange', c:'#ff9a3c' }, { n:'yellow', c:'#ffd93d' },
+  { n:'green',  c:'#4fcf6a' }, { n:'blue',   c:'#4aa8ff' }, { n:'purple', c:'#a66bff' }
+];
+
+const ART = {};
+
+/* ---- Gabby: curly hair, kitty-ear headband, rainbow bracelet ---- */
+ART.gabby = (g,t,o)=>{
+  const skin='#d29a6c', hair='#3b2116', top='#ff7cbd', skirt='#b77bff';
+  // big curly hair behind the head
+  const pts = [];
+  for(let i=0;i<22;i++){
+    const a = i/22*TAU, r = i%2 ? 29 : 34;
+    pts.push(Math.cos(a)*r*1.05, -20 + Math.sin(a)*r*0.95 + (Math.sin(a) > 0 ? Math.sin(a)*10 : 0));
+  }
+  smooth(g, pts, hair, 2.4);
+  if(o.tail){
+    mermaidTail(g, 8, 40, 14, '#3fd0c9', '#ff8fc8', t);
+    rrect(g,-12,-1,24,13,6,top);
+  } else {
+    limb(g,-6,30,-7,42,skin,4.5); limb(g,6,30,7,42,skin,4.5);
+    ell(g,-8,45,7,4,0,'#a66bff'); ell(g,8,45,7,4,0,'#a66bff');
+    shape(g,[-11,8, 11,8, 20,33, -20,33], skirt);
+    for(let i=0;i<4;i++) circ(g,-12+i*8,28,1.8,'#fff',0);
+    rrect(g,-12,-1,24,14,6,top);
+  }
+  // arms: left one waves a little
+  const wave = Math.sin(t*3)*0.12;
+  limb(g,-11,3,-21,18+wave*20,skin,4.5);
+  limb(g,11,3,21,18,skin,4.5);
+  if(o.bracelet !== false){
+    for(let i=0;i<6;i++){ const a = i/6*TAU + t; circ(g,-21+Math.cos(a)*3.6,15+wave*20+Math.sin(a)*1.6,1.7,RAINBOW[i].c,0); }
+  }
+  // head
+  circ(g,0,-20,19.5,skin);
+  // bangs
+  g.beginPath(); g.arc(0,-20,20.2,Math.PI*1.02,Math.PI*1.98);
+  g.lineTo(19,-25);
+  g.quadraticCurveTo(13,-32,8,-26); g.quadraticCurveTo(3,-33,-2,-27);
+  g.quadraticCurveTo(-8,-33,-12,-26); g.quadraticCurveTo(-16,-31,-19.5,-24);
+  g.closePath(); fillStroke(g,hair,0);
+  // face
+  if(o.snorkel){
+    snorkel(g,-17,17);
+    eye(g,-7,-17,4.2,t,0.1,'#5a2e1a'); eye(g,7,-17,4.2,t,0.1,'#5a2e1a');
+  } else {
+    eye(g,-7,-17,4.6,t,0.1,'#5a2e1a'); eye(g,7,-17,4.6,t,0.1,'#5a2e1a');
+  }
+  blush(g,-12,-10); blush(g,12,-10);
+  smile(g,0,-7,5,o.happy !== false);
+  // the magic cat-ear headband
+  if(o.ears !== false){
+    g.beginPath(); g.arc(0,-20,21.5,Math.PI*1.12,Math.PI*1.88);
+    g.lineWidth=6.5; g.strokeStyle=OUT; g.stroke(); g.lineWidth=4; g.strokeStyle='#ff9ad0'; g.stroke();
+    catEar(g,-13,-37,13,14,-0.38,'#ff9ad0','#b06cff');
+    catEar(g,13,-37,13,14,0.38,'#ff9ad0','#b06cff');
+  }
+};
+
+/* ---- Pandy Paws: a panda plush with a patch ---- */
+ART.pandy = (g,t,o)=>{
+  const W='#fbfbfb', B='#2c2833';
+  circ(g,-17,-37,9,B); circ(g,17,-37,9,B);
+  if(o.tail) mermaidTail(g, 18, 34, 15, '#ff9ad0', '#b06cff', t+1);
+  else { ell(g,-10,41,8,8,0,B); ell(g,10,41,8,8,0,B); }
+  ell(g,0,18,19,22,0,W);
+  rrect(g,3,16,10,10,3,'#ffb3d1',1.6);
+  g.setLineDash([2,2]); rrect(g,4.5,17.5,7,7,2,null,1); g.setLineDash([]);
+  ell(g,-19,13,7,11,0.4,B); ell(g,19,13,7,11,-0.4,B);
+  ell(g,0,-18,24,21,0,W);
+  ell(g,-9,-19,6.5,8.5,-0.5,B,0); ell(g,9,-19,6.5,8.5,0.5,B,0);
+  if(o.snorkel){ snorkel(g,-19,18); }
+  eye(g,-9,-19,3.6,t,0.4,'#2c2833'); eye(g,9,-19,3.6,t,0.4,'#2c2833');
+  ell(g,0,-9,4,3,0,B,0);
+  smile(g,0,-4,4,false);
+  blush(g,-15,-8,3.5); blush(g,15,-8,3.5);
+};
+
+/* ---- CatRat: lavender, big round rat ears, a long pink tail ---- */
+ART.catrat = (g,t,o)=>{
+  const F='#a596c2', P='#ffb3cf';
+  if(o.shiver){ g.translate(Math.sin(t*45)*1.2, 0); }
+  g.beginPath(); g.moveTo(12,32); g.bezierCurveTo(40,44,50,12+Math.sin(t*3)*6,36,-2);
+  g.lineWidth=7.5; g.strokeStyle=OUT; g.lineCap='round'; g.stroke(); g.lineWidth=4.5; g.strokeStyle=P; g.stroke();
+  ell(g,-8,44,7,4,0,P); ell(g,8,44,7,4,0,P);
+  ell(g,0,24,16,20,0,F);
+  ell(g,0,28,9,12,0,'#e1d8ef',0);
+  ell(g,-16,18,5,9,0.4,F); ell(g,16,18,5,9,-0.4,F);
+  circ(g,-19,-33,13,F); circ(g,-19,-33,8,P,0);
+  circ(g,19,-33,13,F); circ(g,19,-33,8,P,0);
+  ell(g,0,-13,22,19,0,F);
+  if(o.cold){ closedEye(g,-8,-15,4.5); closedEye(g,8,-15,4.5); }
+  else { eye(g,-8,-16,5,t,0.7,'#3c7a3a'); eye(g,8,-16,5,t,0.7,'#3c7a3a'); }
+  shape(g,[-3,-8, 3,-8, 0,-5], P, 1.6);
+  rrect(g,-3.5,-4,7,6,1.5,'#fff',1.4); line(g,0,-4,0,2,OUT,1);
+  whiskers(g,0,-6,12);
+  if(o.cold){ g.fillStyle='rgba(120,190,255,.25)'; g.beginPath(); g.ellipse(0,-13,22,19,0,0,TAU); g.fill(); }
+};
+
+/* ---- Carlita: a pink car-cat with her eyes in the windshield ---- */
+ART.carlita = (g,t,o)=>{
+  const C='#ff5fa8', C2='#ffd0e6';
+  // her cat tail at the back
+  g.beginPath(); g.moveTo(-46,0); g.quadraticCurveTo(-62,-8,-56,-26+Math.sin(t*3)*4);
+  g.lineWidth=8; g.strokeStyle=OUT; g.lineCap='round'; g.stroke(); g.lineWidth=5; g.strokeStyle=C; g.stroke();
+  if(o.tail){
+    g.save(); g.translate(-50,12); g.rotate(Math.sin(t*4)*0.25);
+    ell(g,-8,-6,12,6,0.5,'#3fd0c9'); ell(g,-8,6,12,6,-0.5,'#3fd0c9');
+    g.restore();
+  }
+  catEar(g,-14,-30,14,13,-0.3,C,C2); catEar(g,10,-30,14,13,0.3,C,C2);
+  if(o.riders){
+    // tiny Gabby and Pandy popping out of the sunroof
+    g.save(); g.translate(-12,-36); g.scale(0.32,0.32); ART.gabby(g,t,{}); g.restore();
+    g.save(); g.translate(8,-36); g.scale(0.3,0.3); ART.pandy(g,t,{}); g.restore();
+  }
+  rrect(g,-28,-32,48,26,13,C);
+  rrect(g,-23,-28,38,18,8,'#c9efff');
+  eye(g,-11,-19,6,t,0.25,'#3a6ad0'); eye(g,4,-19,6,t,0.25,'#3a6ad0');
+  rrect(g,-48,-10,96,30,14,C);
+  rrect(g,-44,0,88,5,2,C2,0);
+  circ(g,42,-1,4.5,'#fff6b0',1.8);
+  smile(g,38,10,5,true);
+  whiskers(g,38,7,8);
+  if(o.snorkel) { limb(g,18,-30,22,-46,'#ffd23f',3.5); rrect(g,18,-52,8,7,3,'#ff8a3d',2); }
+  if(!o.tail){
+    const spin = o.spin != null ? o.spin : t*3;
+    [-28,28].forEach(x => {
+      circ(g,x,22,11,'#3a2a48');
+      circ(g,x,22,5,'#d9cfe8',1.6);
+      g.strokeStyle='#d9cfe8'; g.lineWidth=2;
+      for(let i=0;i<3;i++){ const a = spin + i*TAU/3; g.beginPath(); g.moveTo(x,22); g.lineTo(x+Math.cos(a)*9,22+Math.sin(a)*9); g.stroke(); }
+    });
+  }
+};
+
+/* ---- DJ Catnip: a blue tabby with big purple headphones ---- */
+ART.djcatnip = (g,t,o)=>{
+  const F='#8e9be0', S='#6874c0';
+  g.beginPath(); g.moveTo(10,36); g.quadraticCurveTo(36,30,30,8+Math.sin(t*4)*5);
+  g.lineWidth=8; g.strokeStyle=OUT; g.lineCap='round'; g.stroke(); g.lineWidth=5; g.strokeStyle=F; g.stroke();
+  ell(g,-8,44,7,4,0,F); ell(g,8,44,7,4,0,F);
+  ell(g,0,24,16,20,0,F);
+  [10,18,26].forEach(y => line(g,-12,y,-6,y+1,S,2.5));
+  [10,18,26].forEach(y => line(g,12,y,6,y+1,S,2.5));
+  ell(g,-16,16,5,10,0.5,F); ell(g,16,16,5,10,-0.5,F);
+  catEar(g,-13,-28,15,16,-0.3,F,'#ffc2dc'); catEar(g,13,-28,15,16,0.3,F,'#ffc2dc');
+  ell(g,0,-13,21,18,0,F);
+  line(g,-5,-29,-4,-23,S,2.5); line(g,0,-30,0,-24,S,2.5); line(g,5,-29,4,-23,S,2.5);
+  eye(g,-8,-14,4.8,t,0.5,'#3a2a8a'); eye(g,8,-14,4.8,t,0.5,'#3a2a8a');
+  shape(g,[-3,-7, 3,-7, 0,-4], '#ff9ccc', 1.6);
+  smile(g,0,-1,5,true);
+  whiskers(g,0,-5,12);
+  g.beginPath(); g.arc(0,-14,24,Math.PI*1.08,Math.PI*1.92);
+  g.lineWidth=7; g.strokeStyle=OUT; g.stroke(); g.lineWidth=4.5; g.strokeStyle='#a66bff'; g.stroke();
+  rrect(g,-28,-24,9,17,4,'#a66bff'); rrect(g,19,-24,9,17,4,'#a66bff');
+  circ(g,-23.5,-15.5,3,'#ffd54f',0); circ(g,23.5,-15.5,3,'#ffd54f',0);
+};
+
+/* ---- MerCat: a mermaid cat, science goggles on her head ---- */
+ART.mercat = (g,t,o)=>{
+  const F='#ffb07c';
+  mermaidTail(g, 12, 38, 16, '#45c6c0', '#ff8fc8', t);
+  ell(g,0,10,15,12,0,F);
+  ell(g,-6,6,6,5,0.3,'#c48bff'); ell(g,6,6,6,5,-0.3,'#c48bff');
+  ell(g,-17,8,5,10,0.6,F); ell(g,17,8,5,10,-0.6,F);
+  catEar(g,-13,-28,15,16,-0.3,F,'#ffd6e6'); catEar(g,13,-28,15,16,0.3,F,'#ffd6e6');
+  ell(g,0,-13,21,18,0,F);
+  // science goggles pushed up on her forehead
+  line(g,-21,-25,21,-25,OUT,5); line(g,-21,-25,21,-25,'#7a5cff',3);
+  circ(g,-8,-26,6,'#bff0ff',2); circ(g,8,-26,6,'#bff0ff',2);
+  shine(g,-10,-28,2); shine(g,6,-28,2);
+  star(g,15,-33,5,'#ff8fc8',1.4);
+  eye(g,-8,-12,4.8,t,0.9,'#1f8a85'); eye(g,8,-12,4.8,t,0.9,'#1f8a85');
+  shape(g,[-3,-5, 3,-5, 0,-2], '#ff7aa8', 1.6);
+  smile(g,0,1,5,true);
+  whiskers(g,0,-3,12);
+  blush(g,-14,-5); blush(g,14,-5);
+};
+
+/* ---- Baby Box: a cardboard-box kitty who loves crafts ---- */
+ART.babybox = (g,t,o)=>{
+  const K='#e0a764', K2='#c98b45';
+  ell(g,-8,46,6,3.5,0,K2); ell(g,8,46,6,3.5,0,K2);
+  shape(g,[-20,4, -30,-2, -22,10], K, 2.2); shape(g,[20,4, 30,-2, 22,10], K, 2.2);
+  rrect(g,-20,6,40,38,4,K);
+  line(g,-20,18,20,18,'#b97a3a',2);
+  rrect(g,-4,6,8,12,1,'#f3d39a',0);
+  limb(g,-20,24,-28,32,K,4); limb(g,20,24,28,32,K,4);
+  catEar(g,-14,-34,14,13,-0.25,K,'#ffc2dc'); catEar(g,14,-34,14,13,0.25,K,'#ffc2dc');
+  rrect(g,-22,-36,44,38,10,K);
+  line(g,-16,-30,-8,-30,'#b97a3a',1.6);
+  eye(g,-8,-18,6,t,0.15,'#3a2a55'); eye(g,8,-18,6,t,0.15,'#3a2a55');
+  smile(g,0,-7,4,true);
+  blush(g,-15,-9); blush(g,15,-9);
+  whiskers(g,0,-9,10);
+};
+
+/* ---- Cakey: a cupcake cat with a cherry on top ---- */
+ART.cakey = (g,t,o)=>{
+  limb(g,-15,18,-24,24,'#ff9ccc',3.5); limb(g,15,18,24,24,'#ff9ccc',3.5);
+  shape(g,[-19,6, 19,6, 14,42, -14,42], '#6fd3c9');
+  g.strokeStyle='rgba(255,255,255,.6)'; g.lineWidth=2;
+  for(let i=-2;i<=2;i++){ g.beginPath(); g.moveTo(i*7,9); g.lineTo(i*5.2,40); g.stroke(); }
+  catEar(g,-14,-12,13,14,-0.35,'#ff9ccc','#fff'); catEar(g,14,-12,13,14,0.35,'#ff9ccc','#fff');
+  ell(g,0,-22,11,8,0,'#ffb3d9'); ell(g,0,-12,18,10,0,'#ffb3d9'); ell(g,0,1,24,12,0,'#ff9ccc');
+  [[-14,-14,'#4aa8ff'],[9,-19,'#ffd93d'],[14,-9,'#4fcf6a'],[-6,-24,'#a66bff'],[-18,-4,'#ff9a3c']].forEach(s => rrect(g,s[0],s[1],4,2,1,s[2],0));
+  line(g,0,-30,4,-38,'#5a8a2a',2);
+  circ(g,0,-31,5.5,'#e8314f'); shine(g,-1.5,-33,1.5);
+  eye(g,-8,0,4.4,t,0.6,'#3a2a55'); eye(g,8,0,4.4,t,0.6,'#3a2a55');
+  smile(g,0,6,4,true);
+  blush(g,-15,5); blush(g,15,5);
+};
+
+/* ---- Pillow Cat: a sleepy square pillow with starry spots ---- */
+ART.pillowcat = (g,t,o)=>{
+  const C='#c9b3f5', breathe = 1 + Math.sin(t*1.6)*0.03;
+  g.save(); g.scale(1, breathe);
+  catEar(g,-20,-21,15,14,-0.25,C,'#ffd6ec'); catEar(g,20,-21,15,14,0.25,C,'#ffd6ec');
+  smooth(g,[-34,-26, 0,-21, 34,-26, 29,4, 34,32, 0,27, -34,32, -29,4], C);
+  [[-18,14],[16,-12],[20,18],[-22,-12]].forEach(p => star(g,p[0],p[1],4,'#fff3a8',0));
+  closedEye(g,-10,-2,6); closedEye(g,10,-2,6);
+  smile(g,0,9,3.5,false);
+  blush(g,-18,6); blush(g,18,6);
+  g.restore();
+  if(o.zzz !== false){
+    g.fillStyle='#8a6bd0'; g.font='bold 12px sans-serif'; g.textAlign='center';
+    const k = (t*0.6) % 1;
+    g.globalAlpha *= (1-k); g.fillText('z', 30 + k*10, -30 - k*18);
+  }
+};
+
+/* ---- Santa ---- */
+ART.santa = (g,t,o)=>{
+  const R='#e2333f', W='#ffffff', skin='#f6c9a8';
+  ell(g,-11,45,9,5,0,'#2c2833'); ell(g,11,45,9,5,0,'#2c2833');
+  ell(g,0,18,27,27,0,R);
+  rrect(g,-4,-6,8,50,3,W,0);
+  rrect(g,-27,17,54,8,2,'#2c2833',0);
+  rrect(g,-6,15.5,12,11,2,'#ffd54f',1.6);
+  const wave = Math.sin(t*3)*0.25;
+  ell(g,-27,10,8,15,0.5,R); circ(g,-32,22,6,'#2fa35a');
+  g.save(); g.translate(26,4); g.rotate(-0.9 + wave); ell(g,0,0,8,15,0,R); circ(g,0,-14,6,'#2fa35a'); g.restore();
+  smooth(g,[-18,-14, 0,-8, 18,-14, 16,4, 8,14, 0,18, -8,14, -16,4], W);
+  circ(g,0,-20,14,skin);
+  g.beginPath(); g.moveTo(-16,-27); g.quadraticCurveTo(-6,-58,18,-50); g.quadraticCurveTo(22,-44,24,-38);
+  g.quadraticCurveTo(14,-42,16,-27); g.closePath(); fillStroke(g,R);
+  circ(g,24,-37,6,W);
+  rrect(g,-18,-31,36,9,4.5,W);
+  eye(g,-5,-20,3,t,0.33,'#3a5aa8'); eye(g,5,-20,3,t,0.33,'#3a5aa8');
+  blush(g,-10,-14,4); blush(g,10,-14,4);
+  circ(g,0,-15,3.6,'#f19b8c',1.4);
+  ell(g,-5,-10,6,3,0.2,W,1.4); ell(g,5,-10,6,3,-0.2,W,1.4);
+};
+
+/* ---- Pete the polar bear, in his Christmas scarf ---- */
+ART.pete = (g,t,o)=>{
+  const W='#f6f9fd', S='#dbe6f2';
+  if(o.shiver){ g.translate(Math.sin(t*41)*1.2, 0); }
+  ell(g,-14,41,11,7,0,W); ell(g,14,41,11,7,0,W);
+  ell(g,0,16,27,26,0,W);
+  ell(g,0,22,16,16,0,S,0);
+  ell(g,-26,12,9,15,0.3,W); ell(g,26,12,9,15,-0.3,W);
+  circ(g,-17,-35,8,W); circ(g,-17,-35,4,S,0);
+  circ(g,17,-35,8,W); circ(g,17,-35,4,S,0);
+  ell(g,0,-17,24,21,0,W);
+  ell(g,0,-9,11,8,0,S,0);
+  ell(g,0,-12,4.5,3,0,'#2c2833',0);
+  smile(g,0,-5,4,false);
+  if(o.cold){ closedEye(g,-9,-21,4); closedEye(g,9,-21,4); }
+  else { eye(g,-9,-21,4,t,0.2,'#2c2833'); eye(g,9,-21,4,t,0.2,'#2c2833'); }
+  rrect(g,-22,-2,44,9,4,'#e2333f');
+  rrect(g,10,2,9,20,3,'#e2333f');
+  line(g,11,10,18,10,'#2fa35a',2.5); line(g,11,16,18,16,'#2fa35a',2.5);
+  line(g,-14,-2,-14,7,'#2fa35a',2.5); line(g,0,-2,0,7,'#2fa35a',2.5);
+  if(o.cold){ g.fillStyle='rgba(120,190,255,.25)'; g.beginPath(); g.ellipse(0,-17,24,21,0,0,TAU); g.fill(); }
+};
+
+/* ---------------- Props ---------------- */
+ART.ears = (g,t,o)=>{
+  g.save(); g.scale(1.5,1.5);
+  g.beginPath(); g.arc(0,8,26,Math.PI*1.1,Math.PI*1.9);
+  g.lineWidth=9; g.strokeStyle=OUT; g.lineCap='round'; g.stroke(); g.lineWidth=6; g.strokeStyle='#ff9ad0'; g.stroke();
+  catEar(g,-15,-11,15,17,-0.4,'#ff9ad0','#b06cff');
+  catEar(g,15,-11,15,17,0.4,'#ff9ad0','#b06cff');
+  g.restore();
+  twinkle(g,-30,-30,6+Math.sin(t*5)*2); twinkle(g,32,-20,5+Math.cos(t*4)*2,'#fff3a8');
+};
+ART.bracelet = (g,t,o)=>{
+  const R = 30, n = 18;
+  g.beginPath(); g.arc(0,0,R,0,TAU); g.lineWidth=2; g.strokeStyle='#d9c6ff'; g.stroke();
+  for(let i=0;i<n;i++){
+    const a = i/n*TAU + t*0.3;
+    circ(g, Math.cos(a)*R, Math.sin(a)*R, 6.2, RAINBOW[i%6].c, 1.8);
+    shine(g, Math.cos(a)*R-2, Math.sin(a)*R-2, 1.6);
+  }
+  for(let i=0;i<4;i++){ const a = t*1.5 + i*TAU/4; twinkle(g, Math.cos(a)*44, Math.sin(a)*44, 4 + Math.sin(t*6+i)*2, i%2?'#fff':'#fff3a8'); }
+};
+ART.bead = (g,t,o)=>{
+  circ(g,0,0,30,o.color||'#ff4d5e',3);
+  circ(g,0,0,8,'rgba(255,255,255,.75)',2);
+  shine(g,-12,-12,7);
+};
+ART.snorkel = (g,t,o)=>{
+  g.save(); g.scale(1.6,1.6);
+  limb(g,20,4,24,-26,o.color||'#ffd23f',5);
+  rrect(g,19,-33,10,8,3,'#ff8a3d',2);
+  rrect(g,-24,-8,44,22,11,'rgba(140,215,255,.7)',2.6);
+  rrect(g,-24,-8,44,22,11,null,0);
+  line(g,-24,3,-30,3,OUT,3);
+  shine(g,-12,-1,5);
+  g.restore();
+};
+ART.icecube = (g,t,o)=>{
+  const m = o.melt || 0, s = 1 - m*0.35, h = 44*s;
+  const wob = o.float ? Math.sin(t*2)*3 : 0;
+  const tilt = o.float ? Math.sin(t*1.3)*0.05 : 0;
+  g.save(); g.translate(0, wob); g.rotate(tilt);
+  if(o.inside){
+    g.save(); roundBox(g,-h,-h,h*2,h*2,12*s); g.clip();
+    g.fillStyle='#e4f6ff'; g.fill();
+    const n = o.inside.length;
+    o.inside.forEach((k,i) => drawArt(g, k, (i-(n-1)/2)*h*0.95, 6, h*1.35, { t, shiver:true, cold:true }));
+    g.restore();
+  }
+  roundBox(g,-h,-h,h*2,h*2,12*s);
+  g.fillStyle = o.inside ? 'rgba(175,225,255,.45)' : 'rgba(175,225,255,.85)'; g.fill();
+  g.lineWidth=3; g.strokeStyle='#5aaedf'; g.stroke();
+  g.fillStyle='rgba(255,255,255,.45)';
+  g.beginPath(); g.moveTo(-h+7,-h+7); g.lineTo(h-12,-h+7); g.lineTo(h-26,-h+17); g.lineTo(-h+7,-h+17); g.closePath(); g.fill();
+  g.fillStyle='rgba(255,255,255,.35)';
+  g.beginPath(); g.moveTo(h-8,-h+12); g.lineTo(h-8,h-20); g.lineTo(h-15,h-28); g.lineTo(h-15,-h+20); g.closePath(); g.fill();
+  if(m > 0){
+    g.strokeStyle='rgba(255,255,255,.95)'; g.lineWidth=2.2; g.lineCap='round';
+    const cracks = [[-0.2,-1, 0.05,-0.4, -0.15,0.1],[0.6,-0.9, 0.35,-0.2, 0.55,0.3],[-0.9,0.3, -0.4,0.25, -0.3,0.8],[0.2,1, 0.1,0.5, 0.4,0.2]];
+    cracks.slice(0, Math.ceil(m*4)).forEach(c => {
+      g.beginPath(); g.moveTo(c[0]*h,c[1]*h); g.lineTo(c[2]*h,c[3]*h); g.lineTo(c[4]*h,c[5]*h); g.stroke();
+    });
+    g.fillStyle='#9fdcff';
+    for(let i=0;i<3;i++){
+      const k = (t*0.8 + i*0.33) % 1;
+      const dx = (i-1)*h*0.6;
+      g.globalAlpha = 1-k;
+      g.beginPath(); g.ellipse(dx, h + 4 + k*20, 3.5, 5, 0, 0, TAU); g.fill();
+      g.globalAlpha = 1;
+    }
+  }
+  g.restore();
+  if(o.puddle || m > 0){ ell(g,0,h+8+wob,h*1.1+m*16,5+m*3,0,'rgba(140,210,255,.55)',0); }
+};
+function steam(g,t,x,y){
+  g.strokeStyle='rgba(255,255,255,.85)'; g.lineWidth=3; g.lineCap='round';
+  for(let i=0;i<3;i++){
+    const k = (t*0.5 + i/3) % 1, xx = x + (i-1)*10;
+    g.globalAlpha = 1 - k;
+    g.beginPath(); g.moveTo(xx, y - k*20);
+    g.bezierCurveTo(xx-6, y-8-k*20, xx+6, y-14-k*20, xx, y-22-k*20); g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+ART.cocoa = (g,t,o)=>{
+  g.beginPath(); g.arc(24,8,11,-Math.PI/2,Math.PI/2); g.lineWidth=9; g.strokeStyle=OUT; g.stroke(); g.lineWidth=5.5; g.strokeStyle='#ff7f9f'; g.stroke();
+  rrect(g,-24,-12,46,44,10,'#ff7f9f');
+  ell(g,-1,-12,23,6,0,'#7a3f22');
+  rrect(g,-12,-18,9,8,2,'#fff',1.4); rrect(g,2,-17,9,8,2,'#fff',1.4);
+  star(g,-1,12,8,'#fff',0);
+  steam(g,t,-1,-22);
+};
+ART.sun = (g,t,o)=>{
+  g.save(); g.rotate(t*0.4);
+  for(let i=0;i<10;i++){ g.rotate(TAU/10); shape(g,[-5,-30, 5,-30, 0,-46], '#ffb43f', 2); }
+  g.restore();
+  circ(g,0,0,28,'#ffd93d',2.6);
+  eye(g,-9,-4,4,t,0.4,'#7a4a00'); eye(g,9,-4,4,t,0.4,'#7a4a00');
+  smile(g,0,6,7,true);
+  blush(g,-16,6); blush(g,16,6);
+};
+ART.warmwater = (g,t,o)=>{
+  ell(g,0,10,40,26,0,'#ff9ad0');
+  ell(g,0,4,33,14,0,'#9fe0ff',2);
+  g.strokeStyle='rgba(255,255,255,.8)'; g.lineWidth=2;
+  g.beginPath(); g.arc(-10,4,6,Math.PI*1.1,Math.PI*1.9); g.stroke();
+  g.beginPath(); g.arc(12,6,5,Math.PI*1.1,Math.PI*1.9); g.stroke();
+  ell(g,-30,34,6,5,0,'#c77aa8'); ell(g,30,34,6,5,0,'#c77aa8');
+  steam(g,t,0,-12);
+};
+ART.cookies = (g,t,o)=>{
+  ell(g,0,18,40,10,0,'#fff');
+  [[-16,6],[16,6],[0,-4]].forEach(p => {
+    circ(g,p[0],p[1],15,'#e0a764');
+    [[-5,-4],[5,2],[-2,6],[6,-6]].forEach(c => circ(g,p[0]+c[0],p[1]+c[1],2.2,'#5a3020',0));
+  });
+  if(o.warm !== false) steam(g,t,0,-22);
+};
+ART.snowball = (g,t,o)=>{
+  circ(g,0,4,32,'#ffffff',2.6);
+  g.fillStyle='rgba(160,200,240,.45)'; g.beginPath(); g.arc(6,10,26,0.1*Math.PI,0.9*Math.PI); g.fill();
+  shine(g,-12,-10,9);
+  twinkle(g,20,-20,6+Math.sin(t*5)*2,'#bfe9ff');
+};
+ART.popsicle = (g,t,o)=>{
+  rrect(g,-5,16,10,30,4,'#e8c48a');
+  g.beginPath(); g.moveTo(-20,24); g.lineTo(-20,-24); g.arc(0,-24,20,Math.PI,0); g.lineTo(20,24); g.closePath();
+  fillStroke(g,'#5ec8ff');
+  rrect(g,-20,-4,40,8,0,'#a7e6ff',0);
+  shine(g,-10,-26,6);
+  twinkle(g,24,-30,5+Math.sin(t*5)*2,'#fff');
+};
+ART.snowman = (g,t,o)=>{
+  circ(g,0,26,22,'#fff'); circ(g,0,-6,16,'#fff');
+  rrect(g,-14,-26,28,6,2,'#2c2833'); rrect(g,-9,-44,18,20,3,'#2c2833');
+  circ(g,-5,-9,2,'#2c2833',0); circ(g,5,-9,2,'#2c2833',0);
+  shape(g,[0,-4, 14,-1, 0,1], '#ff9a3c', 1.4);
+  rrect(g,-14,6,28,6,3,'#e2333f');
+  circ(g,0,20,2,'#2c2833',0); circ(g,0,30,2,'#2c2833',0);
+};
+ART.freezer = (g,t,o)=>{
+  rrect(g,-26,-44,52,90,10,'#eef7ff');
+  line(g,-26,-8,26,-8,OUT,2.4);
+  rrect(g,16,-34,5,18,2,'#b8c6d8',1.6); rrect(g,16,0,5,22,2,'#b8c6d8',1.6);
+  flake(g,-4,-26,10,'#7cc4f0');
+  if(o.open){ g.fillStyle='rgba(180,230,255,.7)'; g.beginPath(); g.ellipse(0,-26,30,10,0,0,TAU); g.fill(); }
+};
+function flake(g,x,y,r,col,w){
+  g.save(); g.translate(x,y);
+  g.strokeStyle = col || '#fff'; g.lineWidth = w || Math.max(1.5, r*0.18); g.lineCap='round';
+  for(let i=0;i<6;i++){
+    g.rotate(TAU/6);
+    g.beginPath(); g.moveTo(0,0); g.lineTo(0,-r); g.stroke();
+    g.beginPath(); g.moveTo(0,-r*0.55); g.lineTo(-r*0.25,-r*0.78); g.moveTo(0,-r*0.55); g.lineTo(r*0.25,-r*0.78); g.stroke();
+  }
+  g.restore();
+}
+ART.snowflake = (g,t,o)=>{
+  g.save(); g.rotate(t*0.6);
+  flake(g,0,0,34,OUT,10); flake(g,0,0,34,'#ffffff',5.5);
+  g.restore();
+  circ(g,0,0,5,'#bfe9ff',1.6);
+};
+ART.glass = (g,t,o)=>{
+  // a glass of water; o.cubeY: where the ice cube is (null = no cube yet)
+  g.beginPath(); g.moveTo(-30,-30); g.lineTo(-24,44); g.lineTo(24,44); g.lineTo(30,-30); fillStroke(g,'rgba(220,240,255,.5)');
+  g.beginPath(); g.moveTo(-29,-10); g.lineTo(-24.5,42); g.lineTo(24.5,42); g.lineTo(29,-10); g.closePath();
+  g.fillStyle='rgba(90,180,240,.55)'; g.fill();
+  if(o.cubeY != null){
+    g.save(); g.translate(0, o.cubeY); g.rotate(Math.sin(t*2)*0.08);
+    rrect(g,-12,-12,24,24,5,'rgba(200,240,255,.9)',2);
+    shine(g,-5,-5,3);
+    g.restore();
+  }
+  line(g,-29,-10,29,-10,'rgba(255,255,255,.8)',2);
+};
+ART.cup = (g,t,o)=>{
+  // a cup of water that becomes ice (o.frozen)
+  g.beginPath(); g.moveTo(-26,-20); g.lineTo(-20,40); g.lineTo(20,40); g.lineTo(26,-20); fillStroke(g, o.frozen ? '#d9f2ff' : '#7cc4f0');
+  if(o.frozen){
+    g.strokeStyle='rgba(255,255,255,.9)'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(-12,0); g.lineTo(0,10); g.lineTo(10,-4); g.moveTo(0,10); g.lineTo(4,26); g.stroke();
+    flake(g,-30,-30,9,'#7cc4f0'); flake(g,30,-34,7,'#7cc4f0');
+  } else {
+    g.strokeStyle='rgba(255,255,255,.8)'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(-14,4+Math.sin(t*3)*2); g.quadraticCurveTo(0,0,14,4+Math.cos(t*3)*2); g.stroke();
+  }
+};
+ART.tree = (g,t,o)=>{
+  rrect(g,-7,32,14,14,2,'#8a5a3a');
+  shape(g,[-40,36, 40,36, 0,-6], '#2fa35a');
+  shape(g,[-32,14, 32,14, 0,-24], '#3dbb68');
+  shape(g,[-24,-6, 24,-6, 0,-42], '#4fcf6a');
+  const cols = ['#ff4d5e','#ffd93d','#4aa8ff','#ff9ccc','#a66bff'];
+  [[-20,28],[14,26],[-4,18],[-14,6],[12,4],[0,-12],[-8,-24],[8,-20]].forEach((p,i) => {
+    circ(g,p[0],p[1],3.6,cols[i%5],1.4);
+    if(Math.sin(t*3+i) > 0.3) circ(g,p[0],p[1],6,'rgba(255,255,200,.35)',0);
+  });
+  star(g,0,-46,10,'#ffd54f',2);
+};
+ART.present = (g,t,o)=>{
+  const c = o.color || '#ff5a6e';
+  rrect(g,-30,-14,60,46,6,c);
+  rrect(g,-33,-24,66,13,4,c);
+  rrect(g,-5,-24,10,56,0,'#ffe27a',1.6);
+  ell(g,-11,-30,11,7,0.4,'#ffe27a'); ell(g,11,-30,11,7,-0.4,'#ffe27a');
+  circ(g,0,-28,4.5,'#ffd54f');
+};
+ART.stocking = (g,t,o)=>{
+  g.beginPath(); g.moveTo(-14,-30); g.lineTo(14,-30); g.lineTo(14,16); g.quadraticCurveTo(14,36,-6,36);
+  g.lineTo(-26,36); g.quadraticCurveTo(-36,22,-20,16); g.lineTo(-14,10); g.closePath(); fillStroke(g,'#e2333f');
+  rrect(g,-18,-44,36,16,6,'#fff');
+  star(g,0,6,6,'#ffd54f',0);
+};
+ART.toybox = (g,t,o)=>{
+  rrect(g,-38,-18,76,52,6,'#7cc4f0');
+  rrect(g,-42,-30,84,14,5,'#4aa8ff');
+  star(g,-18,8,8,'#ffd93d',1.6); star(g,6,14,6,'#ff9ccc',1.4); star(g,22,2,7,'#fff',1.4);
+};
+ART.yarn = (g,t,o)=>{
+  ell(g,0,22,36,14,0,'#c98b45');
+  circ(g,0,4,22,'#ff7cbd');
+  g.strokeStyle='#d94f97'; g.lineWidth=2;
+  for(let i=-2;i<=2;i++){ g.beginPath(); g.arc(0,4,22,-0.9+i*0.35,0.9+i*0.35); g.stroke(); }
+  g.beginPath(); g.moveTo(16,14); g.quadraticCurveTo(34,24,24,36); g.stroke();
+};
+ART.cookiejar = (g,t,o)=>{
+  rrect(g,-24,-20,48,52,14,'rgba(220,240,255,.85)');
+  [[-8,8],[8,14],[0,22],[-6,-4]].forEach(p => circ(g,p[0],p[1],8,'#e0a764',1.4));
+  rrect(g,-20,-32,40,12,5,'#ff9ccc');
+  circ(g,0,-36,5,'#ff9ccc');
+};
+ART.candycane = (g,t,o)=>{
+  g.beginPath(); g.moveTo(6,36); g.lineTo(6,-18); g.arc(-6,-18,12,0,Math.PI,true);
+  g.lineWidth=11; g.strokeStyle=OUT; g.lineCap='round'; g.stroke();
+  g.lineWidth=7; g.strokeStyle='#fff'; g.stroke();
+  g.setLineDash([5,5]); g.strokeStyle='#e2333f'; g.stroke(); g.setLineDash([]);
+};
+ART.crayons = (g,t,o)=>{
+  ['#ff4d5e','#4aa8ff','#ffd93d'].forEach((c,i) => {
+    g.save(); g.rotate((i-1)*0.35);
+    rrect(g,-5,-20,10,40,2,c); shape(g,[-5,-20, 5,-20, 0,-30], c, 2);
+    g.restore();
+  });
+};
+ART.mitten = (g,t,o)=>{
+  smooth(g,[-14,30, -18,0, -14,-22, 4,-26, 16,-14, 14,8, 24,-2, 28,8, 16,30], '#4aa8ff');
+  rrect(g,-18,24,36,12,4,'#fff');
+};
+ART.store = (g,t,o)=>{
+  rrect(g,-46,-22,92,66,4,'#fff3d6');
+  for(let i=0;i<6;i++){ shape(g,[-48+i*16,-30, -32+i*16,-30, -32+i*16,-16, -48+i*16,-16], i%2?'#fff':'#4fcf6a', 1.6); }
+  rrect(g,-40,-46,80,16,4,'#ff7cbd');
+  g.fillStyle='#fff'; g.font='bold 11px sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText('GROCERY', 0, -37.5);
+  rrect(g,-10,6,20,38,2,'#9fdcff');
+  rrect(g,-38,0,22,18,2,'#9fdcff'); rrect(g,16,0,22,18,2,'#9fdcff');
+};
+ART.milk = (g,t,o)=>{
+  shape(g,[-16,-18, 16,-18, 16,36, -16,36], '#fff');
+  shape(g,[-16,-18, 0,-34, 16,-18], '#e6eefa');
+  rrect(g,-12,0,24,18,3,'#4aa8ff');
+  g.fillStyle='#fff'; g.font='bold 9px sans-serif'; g.textAlign='center'; g.fillText('MILK',0,12);
+};
+ART.bread = (g,t,o)=>{
+  smooth(g,[-30,30, -32,-6, -24,-22, 0,-26, 24,-22, 32,-6, 30,30], '#e8b16a');
+  smooth(g,[-24,26, -24,-4, 0,-16, 24,-4, 24,26], '#fbe3b4', 0);
+};
+ART.banana = (g,t,o)=>{
+  g.beginPath(); g.moveTo(-30,-14); g.quadraticCurveTo(-20,30,30,18); g.quadraticCurveTo(-6,16,-22,-16); g.closePath();
+  fillStroke(g,'#ffd93d');
+  rrect(g,-33,-20,8,8,2,'#7a5a2a',1.6);
+};
+ART.carrot = (g,t,o)=>{
+  shape(g,[-12,-18, 12,-18, 0,36], '#ff9a3c');
+  [-6,0,6].forEach(x => { g.save(); g.translate(x,-18); g.rotate(x*0.06); ell(g,0,-10,4,11,0,'#4fcf6a',1.6); g.restore(); });
+  line(g,-6,0,0,2,OUT,1.4); line(g,2,12,6,10,OUT,1.4);
+};
+ART.apple = (g,t,o)=>{
+  smooth(g,[0,-16, 22,-22, 28,4, 14,32, 0,26, -14,32, -28,4, -22,-22], '#ff4d5e');
+  line(g,0,-16,4,-30,'#7a5a2a',3);
+  ell(g,12,-26,8,4,-0.4,'#4fcf6a',1.6);
+  shine(g,-12,-6,5);
+};
+ART.warmbubble = (g,t,o)=>{
+  const p = 1 + Math.sin(t*4)*0.06;
+  g.fillStyle='rgba(255,210,90,.35)'; g.beginPath(); g.arc(0,0,40*p,0,TAU); g.fill();
+  circ(g,0,0,28*p,'rgba(255,200,80,.85)',2.2);
+  shine(g,-9,-10,8);
+  twinkle(g,14,8,5,'#fff');
+};
+ART.swirl = (g,t,o)=>{
+  g.save(); g.rotate(-t*2);
+  g.strokeStyle='rgba(225,245,255,.95)'; g.lineWidth=5; g.lineCap='round';
+  g.beginPath();
+  for(let a=0;a<TAU*2.2;a+=0.2){ const r = 4 + a*4.6; const x = Math.cos(a)*r, y = Math.sin(a)*r; if(a) g.lineTo(x,y); else g.moveTo(x,y); }
+  g.stroke();
+  g.restore();
+  flake(g,0,0,9,'#ffffff');
+};
+ART.turntable = (g,t,o)=>{
+  rrect(g,-44,-6,88,30,6,'#5b3a8a');
+  ell(g,-18,-6,18,6,0,'#2c2833');
+  g.save(); g.translate(-18,-6); g.scale(1,0.33); g.rotate(t*4); line(g,0,0,14,0,'#ff9ccc',3); g.restore();
+  ell(g,20,-6,18,6,0,'#2c2833');
+  g.save(); g.translate(20,-6); g.scale(1,0.33); g.rotate(-t*4); line(g,0,0,14,0,'#7fe0cf',3); g.restore();
+  [-30,-10,10,30].forEach((x,i) => circ(g,x,12,3,['#ff4d5e','#ffd93d','#4fcf6a','#4aa8ff'][i],0));
+};
+ART.heart = (g,t,o)=>{
+  g.beginPath(); g.moveTo(0,30); g.bezierCurveTo(-46,0,-24,-36,0,-14); g.bezierCurveTo(24,-36,46,0,0,30); fillStroke(g,o.color||'#ff5fa8');
+  shine(g,-14,-10,6);
+};
+
+/* Draw one ART piece at (x,y), size = height of its 100-unit box. */
+function drawArt(g, key, x, y, size, o){
+  const f = ART[key]; if(!f) return;
+  o = o || {};
+  g.save();
+  g.translate(x, y);
+  if(o.rot) g.rotate(o.rot);
+  const s = size/100;
+  g.scale(s*(o.flip||1), s);
+  if(o.alpha != null) g.globalAlpha *= o.alpha;
+  f(g, o.t != null ? o.t : now(), o);
+  g.restore();
+}
+
+/* ---------------- Live DOM canvases (story, map, win, finale) -------- */
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+const live = [];   // { canvas, draw(g,w,h,t) }
+function liveCanvas(canvas, draw){
+  const e = live.find(l => l.canvas === canvas);
+  if(e){ e.draw = draw; return; }
+  live.push({ canvas, draw });
+}
+function fitCanvas(c){
+  const w = c.clientWidth, h = c.clientHeight;
+  if(!w || !h) return null;
+  const W = Math.round(w*DPR), H = Math.round(h*DPR);
+  if(c.width !== W || c.height !== H){ c.width = W; c.height = H; }
+  const g = c.getContext('2d');
+  g.setTransform(DPR,0,0,DPR,0,0);
+  return { g, w, h };
+}
+function drawLive(t){
+  for(let i=live.length-1;i>=0;i--){
+    const l = live[i];
+    if(!l.canvas.isConnected){ live.splice(i,1); continue; }
+    if(!l.canvas.offsetParent) continue;
+    const f = fitCanvas(l.canvas);
+    if(!f) continue;
+    f.g.clearRect(0,0,f.w,f.h);
+    l.draw(f.g, f.w, f.h, t);
+  }
+}
+/* A one-off still drawing (toast and badge icons). */
+function drawIcon(canvas, key, o){
+  const g = canvas.getContext('2d');
+  g.setTransform(1,0,0,1,0,0);
+  g.clearRect(0,0,canvas.width,canvas.height);
+  drawArt(g, key, canvas.width/2, canvas.height/2 + canvas.height*0.03, canvas.height*0.86, o || {});
+}
+
+/* ---------------- Backdrops for the drawn scenes --------------------- */
+function snowfall(g,w,h,t,n,col){
+  g.fillStyle = col || 'rgba(255,255,255,.9)';
+  for(let i=0;i<n;i++){
+    const x = ((i*97.3 + Math.sin(t*0.7+i)*20) % w + w) % w;
+    const y = ((i*53.1 + t*(24 + (i%5)*8)) % (h+20)) - 10;
+    g.beginPath(); g.arc(x, y, 1.6 + (i%3), 0, TAU); g.fill();
+  }
+}
+function lights(g,w,y,t){
+  g.strokeStyle='#3a6a3a'; g.lineWidth=2;
+  g.beginPath();
+  for(let x=0;x<=w;x+=8){ const yy = y + Math.sin(x/w*Math.PI*4)*8; if(x) g.lineTo(x,yy); else g.moveTo(x,yy); }
+  g.stroke();
+  const cols = ['#ff4d5e','#ffd93d','#4aa8ff','#4fcf6a','#ff9ccc'];
+  for(let i=0, x=12; x<w; x+=34, i++){
+    const yy = y + Math.sin(x/w*Math.PI*4)*8;
+    const on = Math.sin(t*3 + i*1.7) > -0.2;
+    g.fillStyle = cols[i%5]; g.globalAlpha = on ? 1 : 0.35;
+    g.beginPath(); g.ellipse(x, yy+6, 4, 6, 0, 0, TAU); g.fill();
+    if(on){ g.globalAlpha = .25; g.beginPath(); g.arc(x, yy+6, 10, 0, TAU); g.fill(); }
+    g.globalAlpha = 1;
+  }
+}
+function backdrop(g,w,h,scene,t){
+  let gr;
+  switch(scene){
+    case 'kitchen':
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#d9fbef'); gr.addColorStop(1,'#bdeee0');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      for(let x=0;x<w;x+=26) for(let y=h*0.78;y<h;y+=26){ g.fillStyle = ((x+y)/26)%2 < 1 ? '#ffd6ec' : '#fff'; g.fillRect(x,y,26,26); }
+      lights(g,w,10,t);
+      break;
+    case 'spa':
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#d4f7f7'); gr.addColorStop(1,'#a8e6ef');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      g.strokeStyle='rgba(255,255,255,.7)'; g.lineWidth=2;
+      for(let x=0;x<w;x+=30){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h*0.7); g.stroke(); }
+      for(let y=0;y<h*0.7;y+=30){ g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
+      g.fillStyle='#56c3ea'; g.fillRect(0,h*0.72,w,h);
+      g.fillStyle='#8fdcf6';
+      for(let x=0;x<w+40;x+=40){ g.beginPath(); g.arc(x - (t*20)%40, h*0.72, 20, Math.PI, 0); g.fill(); }
+      break;
+    case 'snow':
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#9fd6ff'); gr.addColorStop(1,'#e8f6ff');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      g.fillStyle='#fff';
+      g.beginPath(); g.moveTo(0,h); g.lineTo(0,h*0.72);
+      for(let x=0;x<=w;x+=20) g.lineTo(x, h*0.74 + Math.sin(x/70)*10);
+      g.lineTo(w,h); g.closePath(); g.fill();
+      snowfall(g,w,h,t,40);
+      break;
+    case 'pool':
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#86dcf2'); gr.addColorStop(1,'#1f6ea8');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      g.fillStyle='rgba(255,255,255,.12)';
+      for(let i=0;i<5;i++){ const x = w*(i+0.5)/5 + Math.sin(t*0.5+i)*20; g.beginPath(); g.moveTo(x-12,0); g.lineTo(x+12,0); g.lineTo(x+50,h); g.lineTo(x-10,h); g.fill(); }
+      g.fillStyle='rgba(255,255,255,.35)';
+      for(let i=0;i<14;i++){ const x = (i*71)%w, y = h - ((t*40 + i*57) % h); g.beginPath(); g.arc(x,y,3+(i%3)*2,0,TAU); g.fill(); }
+      break;
+    case 'party':
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#5b2f9a'); gr.addColorStop(1,'#241250');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      for(let i=0;i<6;i++){
+        g.fillStyle = ['rgba(255,124,189,.25)','rgba(127,224,207,.25)','rgba(255,217,61,.22)'][i%3];
+        const x = w*(i+0.5)/6 + Math.sin(t*1.5+i)*30;
+        g.beginPath(); g.moveTo(w/2,0); g.lineTo(x-30,h); g.lineTo(x+30,h); g.closePath(); g.fill();
+      }
+      lights(g,w,8,t);
+      g.fillStyle='rgba(255,255,255,.1)'; g.fillRect(0,h*0.8,w,h*0.2);
+      snowfall(g,w,h,t,24,'rgba(255,255,255,.6)');
+      break;
+    case 'store':
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#fff3d6'); gr.addColorStop(1,'#ffe2b8');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      g.fillStyle='#e8b98a';
+      [0.35,0.6].forEach(f => g.fillRect(0,h*f,w,8));
+      g.fillStyle='#f6d7a8'; g.fillRect(0,h*0.84,w,h);
+      break;
+    case 'craft':
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#fff4c2'); gr.addColorStop(1,'#ffe0f0');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      RAINBOW.forEach((r,i) => {
+        g.strokeStyle = r.c; g.globalAlpha=.28; g.lineWidth=10;
+        g.beginPath(); g.arc(w/2, h*1.05, h*0.95 - i*10, Math.PI, 0); g.stroke();
+      });
+      g.globalAlpha = 1;
+      g.fillStyle='#e8b98a'; g.fillRect(0,h*0.84,w,h);
+      break;
+    case 'room':
+    default:
+      gr = g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#ffe0f0'); gr.addColorStop(1,'#efd8ff');
+      g.fillStyle = gr; g.fillRect(0,0,w,h);
+      g.fillStyle='rgba(255,255,255,.55)';
+      for(let x=15;x<w;x+=40) for(let y=30;y<h*0.8;y+=40){ g.beginPath(); g.arc(x + (y/40%2)*20, y, 3, 0, TAU); g.fill(); }
+      g.fillStyle='#e8b98a'; g.fillRect(0,h*0.82,w,h);
+      g.strokeStyle='#d29f6e'; g.lineWidth=2;
+      for(let x=0;x<w;x+=60){ g.beginPath(); g.moveTo(x,h*0.82); g.lineTo(x,h); g.stroke(); }
+      lights(g,w,8,t);
+  }
+}
+/* A row of cast members standing in a scene. Entries are ART keys, or
+   { k, ...options } when one needs dressing differently. */
+function drawCast(g,w,h,t,cast,who,opts){
+  const n = cast.length;
+  const slot = w / n;
+  const size = Math.min(h*0.74, slot*1.08);
+  const base = h*0.56;
+  cast.forEach((c,i) => {
+    const e = typeof c === 'string' ? { k:c } : c;
+    const o = Object.assign({}, opts && e.k === 'gabby' ? opts : {}, e);
+    let x = slot*(i+0.5), y = base;
+    const talking = e.k === who;
+    if(e.slide){ x += Math.sin(t*1.4)*slot*0.15; o.rot = Math.sin(t*3)*0.05; }
+    if(e.float){ y = h*0.66; o.float = true; }
+    y += Math.sin(t*2 + i*0.9)*3 - (talking ? Math.abs(Math.sin(t*5))*6 : 0);
+    o.t = t + i*0.37;
+    drawArt(g, e.k, x, y, size*(e.k === 'icecube' ? 1.35 : 1) * (e.scale || 1), o);
+  });
+}
+
+/* ==================================================================== *
+ * THE STORY. Chapters are either people talking ('story') or something
+ * to play. `level` groups them for the map.
+ * ==================================================================== */
+const CUBE = { k:'icecube', inside:['catrat','pete'] };
+const CHAPTERS = [
+  { kind:'story', level:1, beats:[
+    { who:'story', scene:'room', cast:['gabby','tree','pandy'], noEars:true,
+      text:'It is Christmas Eve in Gabby\'s Dollhouse! Gabby and Pandy Paws are putting the very last star on the Christmas tree.' },
+    { who:'santa', scene:'snow', cast:['santa','pete'],
+      text:'Ho ho ho! Merry Christmas, Gabby! I brought my best friend from the North Pole. This is Pete the polar bear!' },
+    { who:'pete', scene:'room', cast:['djcatnip','pete','cakey'],
+      text:'Hi, everybody! I love snow, I love ice… and I LOVE ice cream!' },
+    { who:'cakey', scene:'kitchen', cast:['cakey','freezer'],
+      text:'I made Christmas ice cream! It\'s nice and cold, inside my freezer.' },
+    { who:'catrat', scene:'kitchen', cast:['catrat','pete',{k:'freezer',open:true}],
+      text:'Ice cream?! Follow me, Pete! Let\'s climb right in and get some!' },
+    { who:'story', scene:'kitchen', cast:[CUBE],
+      text:'CatRat and Pete climbed into the freezer, and the door went CLICK. Brrrrr! They got so cold that they froze inside a giant ice cube!' },
+    { who:'story', scene:'spa', cast:[Object.assign({slide:true},CUBE)],
+      text:'The ice cube slid out of the kitchen and down the hall… whoooosh… straight toward MerCat\'s ice-cold pool!' },
+    { who:'catrat', scene:'spa', cast:[Object.assign({slide:true},CUBE)],
+      text:'Oh no! Oh NO! Not WATER! I do NOT like water!' },
+    { who:'story', scene:'spa', cast:[Object.assign({float:true},CUBE)], sfx:'plop',
+      text:'PLOP! The ice cube landed in the pool… and it didn\'t sink. It floated on top, bobbing up and down.' },
+    { who:'mercat', scene:'spa', cast:['mercat',Object.assign({float:true},CUBE)],
+      text:'Don\'t worry, CatRat! Hold on, Pete! I\'ll get Gabby. We will get you out of there!' },
+    { who:'gabby', scene:'room', cast:['gabby','pandy'], noEars:true,
+      text:'Let\'s go! I need my magic cat ears to get tiny, and my rainbow bracelet to turn into a mermaid. They\'re right… here… wait. They\'re GONE!' },
+    { who:'pandy', scene:'room', cast:['pandy','gabby'], noEars:true,
+      text:'Don\'t worry, Gabby, we\'ll find them! Let\'s look for your cat ears first. Tap things in your room to look underneath them.' }
+  ]},
+  { kind:'seek', level:1, cfg:{
+      goal:1, badge:'ears', title:'Level 1 · Find the Cat Ears',
+      winTitle:'You found the cat ears!', winScene:'room', winCast:['pandy','ears','gabby'],
+      winText:'Gabby put on her cat ears. Pinch left ear, pinch right ear… and she shrank down TINY! Now she fits in every little room of the dollhouse.' } },
+
+  { kind:'story', level:2, beats:[
+    { who:'gabby', scene:'room', cast:['gabby','pandy'], noBracelet:true,
+      text:'Now my rainbow bracelet! It is round and sparkly, with little circles all the way around, in every color of the rainbow.' },
+    { who:'babybox', scene:'craft', cast:['babybox','crayons'],
+      text:'Um… Gabby? I borrowed your bracelet for a craft. And then… it broke! The beads rolled all over my craft room. I\'m sorry!' },
+    { who:'gabby', scene:'craft', cast:['gabby','babybox'], noBracelet:true,
+      text:'That\'s okay, Baby Box. Everybody makes mistakes. Let\'s fix it together!' },
+    { who:'babybox', scene:'craft', cast:['babybox','bracelet'],
+      text:'A rainbow always goes in the same order: red, orange, yellow, green, blue, purple. Let\'s put the beads back on in rainbow order!' }
+  ]},
+  { kind:'beads', level:2, cfg:{
+      goal:12, badge:'bracelet', title:'Level 2 · The Rainbow Bracelet',
+      winTitle:'The bracelet is fixed!', winScene:'craft', winCast:['babybox','bracelet','gabby'],
+      winText:'Red, orange, yellow, green, blue, purple — two times around! Gabby slipped the sparkly rainbow bracelet back onto her wrist.' } },
+
+  { kind:'story', level:3, beats:[
+    { who:'mercat', scene:'spa', cast:['mercat',Object.assign({float:true},CUBE)],
+      text:'Gabby! My pool is VERY cold and VERY deep. To swim all the way to that ice cube, you\'ll need snorkels so you can breathe under the water.' },
+    { who:'gabby', scene:'room', cast:['gabby','pandy','carlita'],
+      text:'We don\'t have any snorkels! Carlita, can you drive us to the grocery store?' },
+    { who:'carlita', scene:'snow', cast:[{k:'carlita',riders:true}],
+      text:'Beep beep! Hop in! Hold the right arrow to drive, and tap the jump button to hop over the snowballs and presents.' }
+  ]},
+  { kind:'drive', level:3, cfg:{ goal:6, badge:'snowflake', itemName:'snowflakes', title:'Level 3 · Drive to the Store', noWin:true } },
+  { kind:'story', level:3, beats:[
+    { who:'carlita', scene:'store', cast:['carlita','store'],
+      text:'We\'re here! Let\'s find the snorkels. We need three of them: one for Gabby, one for Pandy, and one for me!' }
+  ]},
+  { kind:'shop', level:3, cfg:{
+      goal:3, badge:'snorkel', title:'Level 3 · Three Snorkels',
+      winTitle:'Three snorkels!', winScene:'store', winCast:['gabby','snorkel','carlita','pandy'],
+      winText:'One, two, three snorkels: one for Gabby, one for Pandy and one for Carlita. Back to the dollhouse, fast!' } },
+
+  { kind:'story', level:4, beats:[
+    { who:'mercat', scene:'spa', cast:['mercat'], sfx:'magic',
+      text:'Welcome back! Before anybody jumps into my pool, it\'s time for… SPA SCIENCE!' },
+    { who:'mercat', scene:'spa', cast:['mercat',{k:'icecube'}],
+      text:'Ice is water that got so cold it froze. Cold things keep ice frozen. Warm things make ice melt! Let\'s find out what will melt that ice cube and set CatRat and Pete free.' }
+  ]},
+  { kind:'science', level:4, cfg:{
+      goal:6, badge:'mercat', title:'Level 4 · MerCat\'s Spa Science',
+      winTitle:'You are a scientist!', winScene:'spa', winCast:['sun','mercat','cocoa'],
+      winText:'Warm things melt ice. Cold things keep it frozen. Very cold water turns into ice — and ice floats! Now you know how to save CatRat and Pete.' } },
+
+  { kind:'story', level:5, beats:[
+    { who:'gabby', scene:'spa', cast:['gabby','bracelet'], sfx:'magic',
+      text:'Rainbow bracelet, do your magic!' },
+    { who:'story', scene:'pool', cast:[{k:'pandy',tail:true,snorkel:true},{k:'gabby',tail:true,snorkel:true},{k:'carlita',tail:true,snorkel:true}],
+      text:'Sparkle, sparkle! Gabby, Pandy and Carlita turned into MERMAIDS, with snorkels on their faces, and jumped SPLASH into the ice-cold pool!' },
+    { who:'pandy', scene:'pool', cast:[{k:'pandy',tail:true,snorkel:true},'warmbubble'],
+      text:'Brrr, it\'s so cold! Swim through the warm golden bubbles from MerCat\'s spa jets to stay toasty. And look out for the chilly swirls!' }
+  ]},
+  { kind:'swim', level:5, cfg:{
+      goal:8, badge:'warmbubble', itemName:'warm bubbles', title:'Level 5 · The Ice-Cold Pool',
+      winTitle:'You reached the ice cube!', winScene:'pool', winCast:[{k:'gabby',tail:true,snorkel:true},CUBE],
+      winText:'Gabby, Pandy and Carlita swam right up to the giant ice cube. Inside, CatRat and Pete were shivering…' } },
+
+  { kind:'story', level:6, beats:[
+    { who:'catrat', scene:'pool', cast:[CUBE],
+      text:'G-g-g-Gabby! It\'s s-s-so cold in here! G-get us out!' },
+    { who:'mercat', scene:'spa', cast:['mercat',{k:'icecube',float:true}],
+      text:'Remember our spa science! Give the ice cube WARM things to melt it. Cold things won\'t work. Drag them onto the ice cube, or just tap them.' }
+  ]},
+  { kind:'melt', level:6, cfg:{ goal:4, badge:'icecube', title:'Level 6 · Melt the Ice Cube', noWin:true } },
+  { kind:'story', level:6, beats:[
+    { who:'story', scene:'spa', cast:['catrat','pete'], sfx:'crack',
+      text:'Drip… drip… CRACK! The ice cube broke open, and out popped CatRat and Pete!' },
+    { who:'catrat', scene:'spa', cast:['catrat','gabby'],
+      text:'We\'re free! Thank you, Gabby! And you know what? That water wasn\'t SO bad after all.' },
+    { who:'pete', scene:'spa', cast:['pete','cakey'],
+      text:'Thank you, everybody! Next time I\'ll eat my ice cream from a bowl… not from INSIDE the freezer.' },
+    { who:'santa', scene:'party', cast:['pandy','santa','gabby'],
+      text:'Ho ho ho! You were brave, you were kind, and you used science! I think that calls for a Christmas party!' },
+    { who:'djcatnip', scene:'party', cast:['pillowcat','djcatnip',{k:'turntable',scale:0.8}],
+      text:'Everybody on the dance floor! Let\'s DANCE!' }
+  ]},
+  { kind:'finale', level:6 }
+];
+
+const LEVELS = [
+  { n:1, icon:'ears',      t:'Find the Cat Ears' },
+  { n:2, icon:'bracelet',  t:'Rainbow Bracelet' },
+  { n:3, icon:'carlita',   t:'To the Store' },
+  { n:4, icon:'mercat',    t:'Spa Science' },
+  { n:5, icon:'snorkel',   t:'The Icy Pool' },
+  { n:6, icon:'icecube',   t:'Melt the Ice' }
+];
+LEVELS.forEach(L => { L.start = CHAPTERS.findIndex(c => c.level === L.n); });
+
+/* ==================================================================== *
+ * Screens and progress
+ * ==================================================================== */
+const screenEls = Array.from(document.querySelectorAll('.screen'));
+function showScreen(id){
+  screenEls.forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  el.classList.add('active');
+  el.scrollTop = 0;
+}
+function setPlaying(on, driving){
+  document.body.classList.toggle('playing', !!on);
+  document.body.classList.toggle('driving', !!driving);
+}
+function setGoal(icon, text){
+  drawIcon(document.getElementById('goalIcon'), icon);
+  document.getElementById('goalText').textContent = text;
+}
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function toast(icon, line1, line2, ms=2200){
+  drawIcon(document.getElementById('toastIcon'), icon);
+  document.getElementById('toastT1').textContent = line1;
+  document.getElementById('toastT2').textContent = line2 || '';
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> toastEl.classList.remove('show'), ms);
+}
+
+let unlocked = Math.max(1, Math.min(6, parseInt(Store.get('gabby_unlocked')||'1', 10) || 1));
+let cleared  = Math.max(0, Math.min(6, parseInt(Store.get('gabby_cleared')||'0', 10) || 0));
+let chapterIdx = 0;
+
+function renderMap(){
+  const map = document.getElementById('levelMap');
+  map.innerHTML = '';
+  LEVELS.forEach(Lv => {
+    const b = document.createElement('button');
+    b.className = 'lvl' + (Lv.n > unlocked ? ' locked' : '');
+    b.dataset.testid = 'level-' + Lv.n;
+    b.innerHTML = '<canvas></canvas><div class="n">Level ' + Lv.n + '</div>' +
+                  '<div class="t">' + Lv.t + '</div>' +
+                  '<div class="star">' + (Lv.n <= cleared ? '★ done' : (Lv.n > unlocked ? 'locked' : '')) + '</div>';
+    liveCanvas(b.querySelector('canvas'), (g,w,h,t) => {
+      drawArt(g, Lv.icon, w/2, h/2 + 2, h*(Lv.icon === 'carlita' ? 0.7 : 0.82), { t, inside: Lv.icon === 'icecube' ? ['catrat','pete'] : null });
+    });
+    b.addEventListener('click', () => {
+      if(Lv.n > unlocked){
+        SFX.bonk();
+        toast('pandy', 'Not yet!', 'Finish level ' + unlocked + ' first.');
+        return;
+      }
+      SFX.pop(); startChapter(Lv.start);
+    });
+    map.appendChild(b);
+  });
+}
+
+liveCanvas(document.getElementById('homeScene'), (g,w,h,t) => {
+  backdrop(g,w,h,'room',t);
+  drawCast(g,w,h,t,['santa','gabby',Object.assign({float:true,scale:0.85},CUBE),'pandy','pete'],null);
+});
+
+function goHome(){
+  stopLevel();
+  stopSpeaking();
+  setPlaying(false);
+  renderMap();
+  showScreen('home');
+}
+function startChapter(i){
+  stopLevel();
+  chapterIdx = i;
+  const ch = CHAPTERS[i];
+  if(!ch){ goHome(); return; }
+  if(ch.kind === 'story')        startStory(ch);
+  else if(ch.kind === 'science') startScience(ch);
+  else if(ch.kind === 'finale')  startFinale();
+  else                           startLevel(ch);
+}
+function nextChapter(){ startChapter(chapterIdx + 1); }
+
+function saveProgress(level){
+  cleared = Math.max(cleared, level);
+  unlocked = Math.max(unlocked, Math.min(6, level + 1));
+  Store.set('gabby_cleared', String(cleared));
+  Store.set('gabby_unlocked', String(unlocked));
+}
+/* A level is done: either straight on to the next chapter, or the
+   little "you did it" screen first. */
+function finishLevel(ch){
+  const cfg = ch.cfg || {};
+  stopLevel();
+  setPlaying(false);
+  if(cfg.noWin){ nextChapter(); return; }
+  saveProgress(ch.level);
+  SFX.cheer();
+  document.getElementById('winTitle').textContent = cfg.winTitle || 'You did it!';
+  document.getElementById('winText').textContent = cfg.winText || '';
+  liveCanvas(document.getElementById('winScene'), (g,w,h,t) => {
+    backdrop(g,w,h,cfg.winScene || 'room',t);
+    drawCast(g,w,h,t,cfg.winCast || ['gabby'],'gabby');
+    confetti(g,w,h,t);
+  });
+  showScreen('win');
+  speakAs('story', (cfg.winTitle || 'You did it!') + ' ' + (cfg.winText || ''));
+}
+function confetti(g,w,h,t){
+  const cols = ['#ff4d5e','#ffd93d','#4aa8ff','#4fcf6a','#ff9ccc','#a66bff'];
+  for(let i=0;i<30;i++){
+    const x = (i*67.7) % w + Math.sin(t*2+i)*10;
+    const y = ((i*41 + t*60) % (h+20)) - 10;
+    g.save(); g.translate(x,y); g.rotate(t*3+i);
+    g.fillStyle = cols[i%6]; g.fillRect(-4,-2,8,4);
+    g.restore();
+  }
+}
+
+/* ==================================================================== *
+ * Story screen
+ * ==================================================================== */
+let storyBeats = [], beatIdx = 0;
+function startStory(ch){
+  storyBeats = ch.beats; beatIdx = 0;
+  setPlaying(false);
+  showScreen('story');
+  renderBeat();
+}
+function renderBeat(){
+  const b = storyBeats[beatIdx];
+  document.getElementById('storyWho').textContent = NAMES[b.who] || '';
+  document.getElementById('storyText').textContent = b.text;
+  const gabbyOpts = { ears: !b.noEars, bracelet: !(b.noEars || b.noBracelet) };
+  liveCanvas(document.getElementById('storyScene'), (g,w,h,t) => {
+    backdrop(g,w,h,b.scene,t);
+    drawCast(g,w,h,t,b.cast,b.who,gabbyOpts);
+  });
+  if(b.sfx && SFX[b.sfx]) SFX[b.sfx]();
+  speakAs(b.who, b.text);
+  document.getElementById('storyNext').innerHTML =
+    (beatIdx === storyBeats.length - 1 ? 'Let\'s go! <span class="arrow">▶</span>' : 'Next <span class="arrow">▶</span>');
+}
+document.getElementById('storyNext').addEventListener('click', () => {
+  SFX.pop();
+  beatIdx++;
+  if(beatIdx < storyBeats.length) renderBeat();
+  else { stopSpeaking(); nextChapter(); }
+});
+document.getElementById('storyHearBtn').addEventListener('click', () => {
+  const b = storyBeats[beatIdx];
+  if(b) speakAs(b.who, b.text);
+});
+
+/* ==================================================================== *
+ * Level 4 — MerCat's spa science. This is the main lesson: what melts
+ * ice, what keeps it frozen, what water does in the freezer, and
+ * whether ice sinks or floats. Wrong answers cost nothing; the hint
+ * button never runs out.
+ * ==================================================================== */
+const MELT_CHOICES = [
+  { id:'warm', label:'Warm: it melts the ice!', cls:'warm' },
+  { id:'cold', label:'Cold: the ice stays frozen', cls:'cold' }
+];
+const SCIENCE = [
+  { kind:'float', q:'MerCat drops an ice cube into a glass of water. Will it sink to the bottom, or float on top?',
+    choices:[{id:'sink',label:'Sink',cls:'plain'},{id:'float',label:'Float',cls:'plain'}], answer:'float',
+    hint:'Think about the pool. Where is the big ice cube with CatRat and Pete? Right on top!',
+    why:'Ice floats! That is why the ice cube with CatRat and Pete is bobbing on top of the pool.' },
+  { kind:'melt', item:'cocoa', name:'hot cocoa', answer:'warm',
+    hint:'Hot cocoa is so hot that you have to blow on it before you drink it.',
+    why:'Hot cocoa is warm, and warm things melt ice!' },
+  { kind:'melt', item:'snowball', name:'a snowball', answer:'cold',
+    hint:'A snowball is made of snow. Is snow warm or cold?',
+    why:'A snowball is cold. Cold things keep ice frozen, so it won\'t help.' },
+  { kind:'melt', item:'sun', name:'sunshine', answer:'warm',
+    hint:'How does it feel when you stand in the sunshine on a summer day?',
+    why:'Sunshine is warm! On a sunny day, snowmen and icicles melt away.' },
+  { kind:'melt', item:'popsicle', name:'a popsicle', answer:'cold',
+    hint:'Where do popsicles live? In the freezer!',
+    why:'A popsicle is frozen and cold, so it keeps ice frozen too.' },
+  { kind:'freeze', q:'MerCat puts a cup of water in the freezer. What happens to the water?',
+    choices:[{id:'ice',label:'It turns into ice',cls:'cold'},{id:'juice',label:'It turns into juice',cls:'plain'}], answer:'ice',
+    hint:'What happened to CatRat and Pete when they climbed into the freezer?',
+    why:'When water gets really, really cold, it freezes into ice. That\'s exactly what happened to CatRat and Pete!' }
+];
+let sci = null;   // { ch, i, q, hints, answered, at }
+
+function sciQuestion(q){ return q.q || ('Is ' + q.name + ' warm or cold? Will it melt the ice?'); }
+function startScience(ch){
+  sci = { ch, i:0 };
+  setPlaying(false);
+  document.getElementById('sciTitle').textContent = ch.cfg.title.replace(/^Level \d+ · /, '');
+  document.getElementById('sciDots').innerHTML = SCIENCE.map(()=>'<span></span>').join('');
+  liveCanvas(document.getElementById('sciCanvas'), drawSci);
+  showScreen('science');
+  sciShow();
+}
+function sciShow(){
+  if(sci.i >= SCIENCE.length){ finishLevel(sci.ch); return; }
+  const q = SCIENCE[sci.i];
+  sci.q = q; sci.hints = 0; sci.answered = false; sci.at = now();
+  document.getElementById('sciQ').textContent = sciQuestion(q);
+  document.getElementById('sciWhy').hidden = true;
+  document.getElementById('sciNext').hidden = true;
+  const box = document.getElementById('sciChoices');
+  box.innerHTML = '';
+  (q.choices || MELT_CHOICES).forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'choice ' + c.cls;
+    b.textContent = c.label;
+    b.dataset.id = c.id;
+    b.dataset.testid = 'choice-' + c.id;
+    b.addEventListener('click', () => sciAnswer(b, c.id));
+    box.appendChild(b);
+  });
+  setTimeout(()=> { if(sci && sci.q === q) speakAs('mercat', sciQuestion(q)); }, 250);
+}
+function sciAnswer(btn, id){
+  if(sci.answered) return;
+  const q = sci.q;
+  if(id === q.answer){
+    sci.answered = true; sci.at = now();
+    btn.classList.add('right');
+    Array.from(document.querySelectorAll('#sciChoices .choice')).forEach(b => { if(b !== btn) b.classList.add('gone'); });
+    SFX.magic();
+    const dot = document.getElementById('sciDots').children[sci.i];
+    if(dot) dot.classList.add('on');
+    const why = document.getElementById('sciWhy');
+    why.textContent = 'Spa science! ' + q.why;
+    why.hidden = false;
+    document.getElementById('sciNext').hidden = false;
+    speakAs('mercat', 'Spa science! ' + q.why);
+  } else {
+    btn.classList.add('wrong');
+    SFX.wrong();
+    setTimeout(()=> btn.classList.remove('wrong'), 420);
+    speakAs('mercat', pick(['Hmm, not quite. Try the other one!','Ooh, close! Try again.','Let\'s think again!']));
+  }
+}
+document.getElementById('sciNext').addEventListener('click', () => { SFX.pop(); sci.i++; sciShow(); });
+document.getElementById('sciHint').addEventListener('click', () => {
+  if(!sci || sci.answered) return;
+  sci.hints++;
+  SFX.chime();
+  if(sci.hints === 1){
+    speakAs('mercat', sci.q.hint);
+    toast('mercat', 'A clue from MerCat', sci.q.hint, 3500);
+  } else {
+    const right = (sci.q.choices || MELT_CHOICES).find(c => c.id === sci.q.answer);
+    speakAs('mercat', 'The answer is: ' + right.label + '. Tap it!');
+    toast('mercat', right.label, 'Tap that one!', 3000);
+  }
+});
+document.getElementById('sciSay').addEventListener('click', () => { if(sci && sci.q) speakAs('mercat', sciQuestion(sci.q)); });
+
+function drawSci(g,w,h,t){
+  if(!sci || !sci.q) return;
+  const q = sci.q, since = t - sci.at;
+  backdrop(g,w,h,'spa',t);
+  const s = Math.min(h*0.8, w*0.35);
+  if(q.kind === 'float'){
+    let cubeY = -70;
+    if(sci.answered){ const k = Math.min(1, since/0.8); cubeY = -70 + (-4 + 70)*k + (k >= 1 ? Math.sin(t*2)*2 : 0); }
+    drawArt(g,'mercat',w*0.25,h*0.55,s,{t});
+    drawArt(g,'glass',w*0.65,h*0.55,s,{t,cubeY});
+    if(sci.answered && since < 1.2) twinkle(g,w*0.65,h*0.3,10,'#fff');
+  } else if(q.kind === 'freeze'){
+    drawArt(g,'freezer',w*0.25,h*0.52,s,{t});
+    drawArt(g,'cup',w*0.65,h*0.55,s*0.85,{t,frozen:sci.answered && since > 0.4});
+  } else {
+    drawArt(g,q.item,w*0.28,h*0.52,s*0.85,{t});
+    let melt = 0, frost = false;
+    if(sci.answered){
+      if(q.answer === 'warm') melt = Math.min(0.8, since*0.6);
+      else frost = true;
+    }
+    drawArt(g,'icecube',w*0.7,h*0.5,s*0.8,{t,melt});
+    if(frost) for(let i=0;i<5;i++){ const a = t + i*TAU/5; twinkle(g,w*0.7+Math.cos(a)*s*0.45,h*0.5+Math.sin(a)*s*0.45,6,'#fff'); }
+    g.fillStyle='#4a2f63'; g.font='bold 48px sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText('→', w*0.49, h*0.5);
+  }
+}
+
+/* ==================================================================== *
+ * The playfield: the hands-on levels all share one canvas. Nobody can
+ * lose any of them: a bump is a spin and a lost second, never a game over.
+ * ==================================================================== */
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+let vw = window.innerWidth, vh = window.innerHeight;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  vw = window.innerWidth; vh = window.innerHeight;
+  canvas.width = Math.floor(vw * DPR); canvas.height = Math.floor(vh * DPR);
+  canvas.style.width = vw + 'px'; canvas.style.height = vh + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+let L = null;
+const parts = [];
+const keys = new Set();
+
+function burst(x, y, count, color){
+  for(let i=0;i<count;i++){
+    const a = Math.random()*TAU, s = rand(60,240);
+    parts.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:rand(0.4,0.9), t:0, color, r:rand(3,7) });
+  }
+}
+function updateParts(dt){
+  for(let i=parts.length-1;i>=0;i--){
+    const p = parts[i];
+    p.t += dt;
+    if(p.t >= p.life){ parts.splice(i,1); continue; }
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 120*dt; p.vx *= 0.97;
+  }
+}
+function drawParts(g, camx, camy){
+  parts.forEach(p => {
+    g.globalAlpha = Math.max(0, 1 - p.t/p.life);
+    g.fillStyle = p.color;
+    g.beginPath(); g.arc(p.x - camx, p.y - camy, p.r, 0, TAU); g.fill();
+  });
+  g.globalAlpha = 1;
+}
+
+/* ---------------- Input --------------------------------------------- */
+let pointer = null;
+canvas.addEventListener('pointerdown', (e) => {
+  ensureAudio();
+  pointer = { x:e.clientX, y:e.clientY, id:e.pointerId };
+  try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+  if(!L) return;
+  if(L.kind === 'seek')  seekTap(e.clientX, e.clientY);
+  if(L.kind === 'beads') beadsTap(e.clientX, e.clientY);
+  if(L.kind === 'shop')  shopTap(e.clientX, e.clientY);
+  if(L.kind === 'melt')  meltDown(e.clientX, e.clientY);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if(pointer && e.pointerId === pointer.id){ pointer.x = e.clientX; pointer.y = e.clientY; }
+  if(L && L.kind === 'melt') meltMove(e.clientX, e.clientY);
+});
+function endPointer(e){
+  if(pointer && e.pointerId === pointer.id) pointer = null;
+  if(L && L.kind === 'melt') meltUp(e.clientX, e.clientY);
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+window.addEventListener('keydown', (e) => {
+  if(!L) return;
+  const k = e.key.toLowerCase();
+  if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d',' '].includes(k)){
+    e.preventDefault(); ensureAudio(); keys.add(k === ' ' ? 'space' : k);
+    if(L.kind === 'drive' && (k === ' ' || k === 'arrowup' || k === 'w')) driveJump();
+  }
+});
+window.addEventListener('keyup', (e) => keys.delete(e.key === ' ' ? 'space' : e.key.toLowerCase()));
+window.addEventListener('blur', () => { keys.clear(); pointer = null; });
+function keyVector(){
+  let dx = 0, dy = 0;
+  if(keys.has('arrowleft')  || keys.has('a')) dx -= 1;
+  if(keys.has('arrowright') || keys.has('d')) dx += 1;
+  if(keys.has('arrowup')    || keys.has('w')) dy -= 1;
+  if(keys.has('arrowdown')  || keys.has('s')) dy += 1;
+  return { dx, dy };
+}
+
+/* ---------------- Level start / stop -------------------------------- */
+const INIT = {}, UPDATE = {}, DRAW = {};
+function startLevel(ch){
+  const cfg = ch.cfg;
+  L = { ch, kind:ch.kind, cfg, got:0, done:false, t:0,
+        cam:{x:0,y:0}, me:{x:0,y:0,vx:0,vy:0,face:1,spin:0,hurt:0} };
+  parts.length = 0; keys.clear(); pointer = null;
+  screenEls.forEach(s => s.classList.remove('active'));
+  setPlaying(true, ch.kind === 'drive');
+  setGoal(cfg.badge, ch.kind === 'seek' ? 'Find the cat ears!' : ('0 / ' + cfg.goal));
+  INIT[ch.kind]();
+  toast(cfg.badge, cfg.title, goalLine());
+  speakAs(goalWho(), goalLine());
+}
+function goalWho(){ return { seek:'pandy', beads:'babybox', drive:'carlita', shop:'carlita', swim:'pandy', melt:'mercat' }[L.kind] || 'story'; }
+function goalLine(){
+  const c = L.cfg;
+  switch(L.kind){
+    case 'seek':  return 'Tap things to look under them. Where are Gabby\'s cat ears?';
+    case 'beads': return 'Tap the beads in rainbow order. Red first!';
+    case 'drive': return 'Drive to the grocery store, and catch the snowflakes on the way!';
+    case 'shop':  return 'Find three snorkels on the shelves!';
+    case 'swim':  return 'Swim through ' + c.goal + ' warm bubbles, then swim up to the ice cube!';
+    case 'melt':  return 'Give the ice cube warm things to melt it!';
+  }
+  return '';
+}
+function stopLevel(){
+  L = null;
+  keys.clear(); pointer = null;
+  parts.length = 0;
+}
+function bumpMe(x, y){
+  const me = L.me;
+  if(me.hurt > 0) return;
+  me.hurt = 1.1; me.spin = Math.PI * 4;
+  SFX.bonk();
+  burst(x, y, 10, '#bfe9ff');
+}
+function collect(n){
+  L.got += n;
+  setGoal(L.cfg.badge, L.got + ' / ' + L.cfg.goal);
+}
+function levelDone(delay){
+  if(L.done) return;
+  L.done = true;
+  const ch = L.ch;
+  setTimeout(()=> { if(L && L.ch === ch) finishLevel(ch); }, delay || 1200);
+}
+
+/* ==================================================================== *
+ * LEVEL 1 — SEEK. Gabby's room at Christmas. Tap things to look under
+ * them. The ears are never under the first two things you try, so it
+ * feels like a real search; after three misses they start to glimmer.
+ * ==================================================================== */
+const SEEK_SPOTS = [
+  { k:'present', color:'#ff5a6e', fx:.23, fy:.82, s:.17, find:'candycane', line:'Just a candy cane!' },
+  { k:'present', color:'#4fcf6a', fx:.38, fy:.89, s:.15, find:'cookies',   line:'Cookies! Yum. But no cat ears.' },
+  { k:'present', color:'#4aa8ff', fx:.09, fy:.91, s:.15, find:'mitten',    line:'A mitten for Pete!' },
+  { k:'stocking',                 fx:.81, fy:.45, s:.15, find:'candycane', line:'Only a candy cane in this stocking.' },
+  { k:'pillowcat',                fx:.57, fy:.86, s:.21, find:null,        line:'Pillow Cat yawns: mmm… no ears under me…', who:'pillowcat' },
+  { k:'toybox',                   fx:.86, fy:.89, s:.17, find:'crayons',   line:'Baby Box\'s crayons!' },
+  { k:'yarn',                     fx:.70, fy:.93, s:.12, find:null,        line:'Just a ball of yarn. Meow!' },
+  { k:'cookiejar',                fx:.48, fy:.55, s:.12, find:null,        line:'Cakey\'s cookie jar. No ears in here!', who:'cakey' }
+];
+INIT.seek = () => {
+  L.spots = SEEK_SPOTS.map(s => Object.assign({ open:0, opened:false, wiggle:0 }, s));
+  L.target = Math.floor(Math.random()*L.spots.length);
+  L.misses = 0; L.found = null;
+};
+function seekLayout(){
+  const m = Math.min(vw, vh);
+  L.spots.forEach(s => { s.x = s.fx*vw; s.y = s.fy*vh; s.size = clamp(s.s*m*1.15, 46, 170); });
+}
+function seekTap(x, y){
+  if(L.done) return;
+  seekLayout();
+  let best = null, bd = Infinity;
+  L.spots.forEach((s,i) => { const d = dist2(x,y,s.x,s.y); if(d < bd && d < (s.size*0.75)**2){ bd = d; best = i; } });
+  if(best == null) return;
+  const s = L.spots[best];
+  if(s.opened){ s.wiggle = 0.4; SFX.pop(); return; }
+  // never under the first two things tried
+  const openedCount = L.spots.filter(p => p.opened).length;
+  if(best === L.target && openedCount < 2){
+    const others = L.spots.map((p,i)=>i).filter(i => i !== best && !L.spots[i].opened);
+    L.target = pick(others);
+  }
+  s.opened = true;
+  if(best === L.target){
+    L.found = s;
+    SFX.magic();
+    burst(s.x, s.y, 40, '#ff9ad0');
+    collect(1);
+    setGoal('ears', 'Found them!');
+    toast('ears', 'The magic cat ears!', 'They were under there all along!');
+    speakAs('gabby', 'My cat ears! You found them! Pinch left ear, pinch right ear… I\'m tiny!');
+    levelDone(3600);
+  } else {
+    L.misses++;
+    SFX.pop();
+    burst(s.x, s.y, 8, '#ffd54f');
+    speakAs(s.who || 'pandy', s.line + (L.misses === 3 ? ' Ooh, wait… I see something sparkly!' : ''));
+  }
+}
+UPDATE.seek = (dt) => {
+  seekLayout();
+  L.spots.forEach(s => {
+    if(s.opened) s.open = Math.min(1, s.open + dt*3);
+    if(s.wiggle > 0) s.wiggle -= dt;
+  });
+};
+DRAW.seek = () => {
+  const g = ctx, t = L.t;
+  backdrop(g, vw, vh, 'room', t);
+  // fireplace
+  const fx = vw*0.68, fy = vh*0.36, fw = vw*0.27, fh = vh*0.36;
+  rrect(g,fx,fy,fw,fh,8,'#e88a7a');
+  for(let r=0;r<6;r++) for(let c=0;c<6;c++) rrect(g,fx+c*fw/6+(r%2)*fw/12,fy+r*fh/6,fw/6-3,fh/6-3,2,null,0);
+  rrect(g,fx-10,fy-6,fw+20,16,6,'#c96a5a');
+  rrect(g,fx+fw*0.22,fy+fh*0.42,fw*0.56,fh*0.58,fh*0.2,'#3a2240');
+  const fl = Math.sin(t*9)*3;
+  ell(g,fx+fw*0.5,fy+fh*0.86,fw*0.14,fh*0.18+fl,0,'#ff9a3c',0);
+  ell(g,fx+fw*0.5,fy+fh*0.9,fw*0.08,fh*0.1-fl,0,'#ffd93d',0);
+  // shelf with the cookie jar
+  rrect(g,vw*0.4,vh*0.6,vw*0.16,10,3,'#c98b45');
+  // window with snow
+  rrect(g,vw*0.4,vh*0.16,vw*0.18,vh*0.24,10,'#9fd6ff');
+  g.save(); roundBox(g,vw*0.4,vh*0.16,vw*0.18,vh*0.24,10); g.clip();
+  g.translate(vw*0.4, vh*0.16); snowfall(g, vw*0.18, vh*0.24, t, 14); g.restore();
+  line(g,vw*0.49,vh*0.16,vw*0.49,vh*0.4,'#fff',4); line(g,vw*0.4,vh*0.28,vw*0.58,vh*0.28,'#fff',4);
+  // the tree
+  const ts = Math.min(vw,vh)*0.62;
+  drawArt(g,'tree',vw*0.2,vh*0.58,ts,{t});
+  // hiding spots
+  L.spots.forEach((s,i) => {
+    if(i === L.target && L.found){
+      drawArt(g,'ears',s.x,s.y - s.size*0.15 - s.open*s.size*0.35,s.size*0.8,{t});
+    } else if(s.opened && s.find){
+      drawArt(g,s.find,s.x,s.y+s.size*0.08,s.size*0.5,{t});
+    }
+    if(i === L.target && !L.found && L.misses >= 3){
+      const a = 0.5 + Math.sin(t*6)*0.5;
+      twinkle(g,s.x - s.size*0.3, s.y - s.size*0.3, 8 + a*6, '#fff3a8');
+      twinkle(g,s.x + s.size*0.35, s.y - s.size*0.1, 6 + (1-a)*6, '#fff');
+    }
+    const lift = s.open*s.size*0.55;
+    const rot = (s.opened ? -0.35*s.open : 0) + (s.wiggle > 0 ? Math.sin(s.wiggle*40)*0.08 : 0);
+    const o = { t, color:s.color, rot, alpha: s.opened ? 0.85 : 1 };
+    drawArt(g, s.k, s.x + (s.opened ? s.open*s.size*0.3 : 0), s.y - lift, s.size, o);
+  });
+  drawParts(g, 0, 0);
+};
+
+/* ==================================================================== *
+ * LEVEL 2 — BEADS. Put the bracelet back together in rainbow order,
+ * twice around. A wrong colour just wobbles and says its own name.
+ * ==================================================================== */
+INIT.beads = () => {
+  L.beads = [];
+  L.wrongs = 0;
+  const cols = RAINBOW.concat(RAINBOW);
+  beadsLayout();
+  const R = L.R;
+  cols.forEach((c,i) => {
+    let x, y, tries = 0;
+    do {
+      x = rand(R+16, vw-R-16); y = rand(vh*0.4, vh-R-24); tries++;
+    } while(tries < 80 && L.beads.some(b => dist2(b.x,b.y,x,y) < (R*2.5)**2));
+    L.beads.push({ color:c, x, y, hx:x, hy:y, on:false, fly:0, wob:0, bob:Math.random()*6, slot:-1 });
+  });
+};
+function beadsLayout(){
+  L.R = clamp(Math.min(vw,vh)*0.055, 20, 34);
+  L.sy = Math.max(150, vh*0.24);
+  L.sx0 = vw*0.1; L.sx1 = vw*0.9;
+}
+function slotPos(i){ return { x: L.sx0 + (L.sx1 - L.sx0)*i/11, y: L.sy + Math.sin(i/11*Math.PI)*24 }; }
+function nextColor(){ return RAINBOW[L.got % 6]; }
+function beadsTap(x, y){
+  if(L.done) return;
+  let best = null, bd = (L.R*1.5)**2;
+  L.beads.forEach(b => { if(b.on) return; const d = dist2(x,y,b.x,b.y); if(d < bd){ bd = d; best = b; } });
+  if(!best) return;
+  const want = nextColor();
+  if(best.color.n === want.n){
+    best.on = true; best.slot = L.got; best.fly = 0;
+    best.fx = best.x; best.fy = best.y;
+    collect(1);
+    L.wrongs = 0;
+    SFX.sparkle();
+    burst(best.x, best.y, 12, best.color.c);
+    if(L.got >= L.cfg.goal){
+      setTimeout(()=> { SFX.magic(); }, 500);
+      speakAs('babybox', 'Purple! Red, orange, yellow, green, blue, purple. Two whole rainbows! The bracelet is fixed!');
+      levelDone(4200);
+    } else {
+      speakAs('babybox', best.color.n + '! Next is ' + nextColor().n + '.');
+    }
+  } else {
+    best.wob = 0.5;
+    L.wrongs++;
+    SFX.wrong();
+    speakAs('babybox', 'That one is ' + best.color.n + '. We need ' + want.n + ' next!');
+  }
+}
+UPDATE.beads = (dt) => {
+  beadsLayout();
+  L.beads.forEach(b => {
+    b.bob += dt*2;
+    if(b.wob > 0) b.wob -= dt;
+    if(b.on){
+      b.fly = Math.min(1, b.fly + dt*2.5);
+      const p = slotPos(b.slot), k = 1 - Math.pow(1-b.fly, 3);
+      b.x = b.fx + (p.x - b.fx)*k; b.y = b.fy + (p.y - b.fy)*k - Math.sin(k*Math.PI)*60;
+    }
+  });
+};
+DRAW.beads = () => {
+  const g = ctx, t = L.t, R = L.R;
+  backdrop(g, vw, vh, 'craft', t);
+  drawArt(g,'babybox',vw*0.08 + 30, vh - 70, Math.min(140, vh*0.18),{t});
+  // the string
+  g.strokeStyle = '#c9a6ff'; g.lineWidth = 4; g.lineCap = 'round';
+  g.beginPath();
+  for(let i=0;i<=11;i++){ const p = slotPos(i); if(i) g.lineTo(p.x,p.y); else g.moveTo(p.x,p.y); }
+  g.stroke();
+  const sr = Math.min(R, (L.sx1-L.sx0)/11*0.46);
+  for(let i=0;i<12;i++){
+    const p = slotPos(i);
+    g.setLineDash([4,4]);
+    circ(g,p.x,p.y,sr*0.9,'rgba(255,255,255,.6)',2);
+    g.setLineDash([]);
+    if(i === L.got && !L.done){
+      const pulse = 1 + Math.sin(t*6)*0.12;
+      circ(g,p.x,p.y,sr*0.9*pulse,null,0);
+      g.lineWidth = 5; g.strokeStyle = RAINBOW[i%6].c; g.beginPath(); g.arc(p.x,p.y,sr*1.05*pulse,0,TAU); g.stroke();
+    }
+  }
+  // "next" label
+  if(!L.done){
+    const nc = nextColor();
+    const lx = vw/2, ly = L.sy + 100;
+    rrect(g, lx-110, ly-24, 220, 48, 24, '#fff', 2.4);
+    circ(g, lx-74, ly, 15, nc.c, 2.4);
+    g.fillStyle = '#4a2f63'; g.font = 'bold 22px "Comic Sans MS", sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillText('Next: ' + nc.n, lx-50, ly+1);
+  }
+  L.beads.forEach(b => {
+    let x = b.x, y = b.y;
+    if(!b.on){ y += Math.sin(b.bob)*4; if(b.wob > 0) x += Math.sin(b.wob*40)*6; }
+    const size = b.on ? sr*2*(1 + 0.5*(1-b.fly)) / 0.6 : R*2/0.6;
+    drawArt(g,'bead',x,y,size,{t,color:b.color.c});
+    // after two wrong taps, the right bead sparkles
+    if(!b.on && L.wrongs >= 2 && b.color.n === nextColor().n && L.beads.find(o => !o.on && o.color.n === b.color.n) === b){
+      twinkle(g,x+R*0.8,y-R*0.8,6+Math.sin(t*8)*3,'#fff3a8');
+    }
+  });
+  if(L.done && L.got >= L.cfg.goal){
+    const k = Math.min(1, (L.t - (L.doneAt || (L.doneAt = L.t)))/1.2);
+    drawArt(g,'bracelet',vw/2,vh*0.58,Math.min(vw,vh)*0.45*k,{t});
+  }
+  drawParts(g, 0, 0);
+};
+
+/* ==================================================================== *
+ * LEVEL 3a — DRIVE. Carlita drives through the snowy town. Hold ▶,
+ * tap ⤴ to hop the snowballs and presents. Bumps just slow you down.
+ * ==================================================================== */
+const GRAVITY = 1800, JUMP_V = 700, DRIVE_SPEED = 300;
+INIT.drive = () => {
+  const c = L.cfg;
+  L.W = 3800;
+  const me = L.me; me.x = 140; me.y = 0; me.vy = 0; me.onGround = true;
+  L.obs = []; L.items = []; L.houses = []; L.pines = [];
+  for(let i=0;i<9;i++) L.obs.push({ x: 560 + i*330 + rand(-50,50), k: i%3 === 1 ? 'present' : 'snowball', color: pick(['#ff5a6e','#4fcf6a','#4aa8ff']) });
+  for(let i=0;i<c.goal;i++) L.items.push({ x: 420 + i*520 + rand(-40,40), h: i%2 ? 170 : 40, got:false, bob:Math.random()*6 });
+  for(let i=0;i<8;i++) L.houses.push({ x: 200 + i*520, c: pick(['#ffb3d9','#c9a6ff','#9fdcff','#ffe27a']) });
+  for(let i=0;i<14;i++) L.pines.push({ x: rand(0, L.W), s: rand(60,110) });
+  L.store = { x: L.W - 220 };
+  L.spin = 0;
+};
+function driveJump(){
+  if(!L || L.kind !== 'drive') return;
+  const me = L.me;
+  if(me.onGround){ me.vy = JUMP_V; me.onGround = false; SFX.jump(); }
+}
+UPDATE.drive = (dt) => {
+  const me = L.me, c = L.cfg;
+  let dx = keyVector().dx;
+  if(L.holdLeft) dx -= 1;
+  if(L.holdRight) dx += 1;
+  if(pointer && !L.holdLeft && !L.holdRight){
+    const tx = pointer.x + L.cam.x;
+    if(Math.abs(tx - me.x) > 30) dx += tx > me.x ? 1 : -1;
+  }
+  dx = clamp(dx, -1, 1);
+  if(L.done) dx = 0;
+  if(dx) me.face = dx > 0 ? 1 : -1;
+  const v = dx*DRIVE_SPEED*(me.hurt > 0 ? .4 : 1);
+  me.x = clamp(me.x + v*dt, 60, L.W - 60);
+  L.spin += v*dt/11;
+  me.vy -= GRAVITY*dt; me.y += me.vy*dt;
+  if(me.y <= 0){ if(!me.onGround) SFX.land(); me.y = 0; me.vy = 0; me.onGround = true; }
+  if(me.hurt > 0){ me.hurt -= dt; }
+  L.obs.forEach(o => {
+    if(Math.abs(o.x - me.x) < 62 && me.y < 50){
+      bumpMe(me.x - L.cam.x, vh - 170);
+      me.x -= me.face*60;
+    }
+  });
+  L.items.forEach(it => {
+    if(it.got) return;
+    it.bob += dt*3;
+    if(Math.abs(it.x - me.x) < 60 && Math.abs(it.h - me.y - 20) < 75){
+      it.got = true; collect(1); SFX.chime();
+      burst(it.x - L.cam.x, vh - 170 - it.h, 12, '#ffffff');
+      if(L.got === c.goal){ SFX.sparkle(); toast('snowflake','All the snowflakes!','Now drive to the store!'); }
+    }
+  });
+  if(me.x > L.store.x - 130 && !L.done){
+    SFX.beep();
+    burst(L.store.x - L.cam.x, vh*0.5, 30, '#ffd54f');
+    toast('store', 'The grocery store!', L.got + ' of ' + c.goal + ' snowflakes');
+    speakAs('carlita', 'Beep beep! We made it!');
+    levelDone(1600);
+  }
+  L.cam.x = clamp(me.x - vw*0.3, 0, Math.max(0, L.W - vw));
+};
+DRAW.drive = () => {
+  const g = ctx, cam = L.cam, me = L.me, t = L.t;
+  const groundY = vh - 140;
+  const sky = g.createLinearGradient(0,0,0,groundY);
+  sky.addColorStop(0,'#8fcfff'); sky.addColorStop(1,'#e6f6ff');
+  g.fillStyle = sky; g.fillRect(0,0,vw,groundY);
+  // far hills
+  g.fillStyle = '#f4fbff';
+  g.beginPath(); g.moveTo(0,groundY);
+  for(let x=0;x<=vw;x+=20) g.lineTo(x, groundY - 90 - Math.sin((x + cam.x*0.2)/140)*30);
+  g.lineTo(vw,groundY); g.closePath(); g.fill();
+  // houses with lights
+  L.houses.forEach(hs => {
+    const x = hs.x - cam.x*0.6;
+    if(x < -120 || x > vw + 120) return;
+    rrect(g,x-50,groundY-110,100,80,4,hs.c);
+    shape(g,[x-62,groundY-108, x,groundY-160, x+62,groundY-108],'#fff');
+    rrect(g,x-12,groundY-70,24,40,3,'#8a5a3a');
+    rrect(g,x-40,groundY-96,22,20,3,'#fff3a8'); rrect(g,x+18,groundY-96,22,20,3,'#fff3a8');
+  });
+  L.pines.forEach(p => {
+    const x = p.x - cam.x*0.8;
+    if(x < -80 || x > vw + 80) return;
+    shape(g,[x-p.s*0.3,groundY-20, x+p.s*0.3,groundY-20, x,groundY-20-p.s],'#3dbb68');
+    shape(g,[x-p.s*0.2,groundY-20-p.s*0.45, x+p.s*0.2,groundY-20-p.s*0.45, x,groundY-20-p.s],'#fff',0);
+  });
+  // road
+  g.fillStyle = '#fff'; g.fillRect(0,groundY-24,vw,vh);
+  g.fillStyle = '#b9c4d6'; g.fillRect(0,groundY-6,vw,52);
+  g.fillStyle = '#fff';
+  for(let x = -((cam.x) % 80); x < vw; x += 80) g.fillRect(x, groundY+17, 40, 5);
+  snowfall(g,vw,groundY,t,50);
+  // store
+  drawArt(g,'store',L.store.x - cam.x, groundY - 110, 230,{t});
+  L.obs.forEach(o => {
+    const x = o.x - cam.x;
+    if(x < -80 || x > vw + 80) return;
+    drawArt(g,o.k,x,groundY - 30,o.k === 'present' ? 74 : 78,{t,color:o.color});
+  });
+  L.items.forEach(it => {
+    if(it.got) return;
+    const x = it.x - cam.x;
+    if(x < -60 || x > vw + 60) return;
+    drawArt(g,'snowflake',x,groundY - 40 - it.h + Math.sin(it.bob)*6,48,{t});
+  });
+  const rot = me.hurt > 0 ? Math.sin(me.hurt*20)*0.15 : (me.onGround ? 0 : -0.1);
+  drawArt(g,'carlita',me.x - cam.x, groundY - 40 - me.y, 120, { t, riders:true, spin:L.spin, rot, flip: me.face });
+  drawParts(g,0,0);
+  if(me.x < L.store.x - vw*0.7){
+    g.fillStyle = 'rgba(74,47,99,' + (0.4 + Math.sin(t*4)*0.2) + ')';
+    g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('➜', vw - 60, groundY - 220);
+  }
+};
+
+/* ==================================================================== *
+ * LEVEL 3b — SHOP. Three snorkels hiding among the groceries.
+ * Counting: one, two, three.
+ * ==================================================================== */
+const GROCERIES = ['milk','bread','banana','carrot','apple','milk','bread','banana','carrot'];
+const NAME_OF = { milk:'milk', bread:'bread', banana:'a banana', carrot:'a carrot', apple:'an apple', snorkel:'a snorkel' };
+INIT.shop = () => {
+  const things = shuffle(GROCERIES.map(k => ({k})).concat([{k:'snorkel',color:'#ffd23f'},{k:'snorkel',color:'#ff7cbd'},{k:'snorkel',color:'#7fe0cf'}]));
+  L.goods = things.map((g,i) => Object.assign(g, { i, wob:0, got:false, fly:0 }));
+};
+function shopPos(i){
+  const cols = 4, r = Math.floor(i/cols), c = i%cols;
+  return { x: vw*(0.14 + c*0.24), y: vh*(0.32 + r*0.2) };
+}
+function shopSize(){ return clamp(Math.min(vw*0.17, vh*0.15), 54, 120); }
+function shopTap(x, y){
+  if(L.done) return;
+  const s = shopSize();
+  let best = null, bd = (s*0.65)**2;
+  L.goods.forEach(gd => { if(gd.got) return; const p = shopPos(gd.i); const d = dist2(x,y,p.x,p.y); if(d < bd){ bd = d; best = gd; } });
+  if(!best) return;
+  if(best.k === 'snorkel'){
+    best.got = true; best.fly = 0;
+    const p = shopPos(best.i); best.fx = p.x; best.fy = p.y;
+    collect(1);
+    SFX.sparkle();
+    burst(p.x, p.y, 14, best.color);
+    const words = ['One snorkel!','Two snorkels!','Three snorkels! That\'s all of them!'];
+    speakAs('carlita', words[L.got-1] || 'A snorkel!');
+    if(L.got >= L.cfg.goal) levelDone(2600);
+  } else {
+    best.wob = 0.5;
+    SFX.wrong();
+    speakAs('carlita', 'That\'s ' + NAME_OF[best.k] + '! We need snorkels.');
+  }
+}
+UPDATE.shop = (dt) => {
+  L.goods.forEach(gd => { if(gd.wob > 0) gd.wob -= dt; if(gd.got) gd.fly = Math.min(1, gd.fly + dt*2); });
+};
+DRAW.shop = () => {
+  const g = ctx, t = L.t, s = shopSize();
+  backdrop(g, vw, vh, 'store', t);
+  for(let r=0;r<3;r++){
+    const y = vh*(0.32 + r*0.2) + s*0.48;
+    rrect(g, vw*0.03, y, vw*0.94, 12, 4, '#c98b45');
+  }
+  // shopping list
+  const lw = 190, lh = 64, lx = 14, ly = Math.max(86, vh*0.12);
+  rrect(g, lx, ly, lw, lh, 12, '#fff', 2.4);
+  g.fillStyle='#4a2f63'; g.font='bold 15px "Comic Sans MS", sans-serif'; g.textAlign='left'; g.textBaseline='top';
+  g.fillText('Shopping list:', lx+10, ly+6);
+  for(let i=0;i<3;i++){
+    drawArt(g,'snorkel',lx+30+i*50,ly+44,34,{t,alpha: i < L.got ? 1 : 0.3});
+    if(i < L.got){ g.strokeStyle='#4fcf6a'; g.lineWidth=4; g.beginPath(); g.moveTo(lx+40+i*50,ly+46); g.lineTo(lx+46+i*50,ly+54); g.lineTo(lx+58+i*50,ly+36); g.stroke(); }
+  }
+  // the cart
+  const cx = vw - 100, cy = vh - 80;
+  shape(g,[cx-70,cy-40, cx+60,cy-40, cx+46,cy+10, cx-56,cy+10],'#c9d6e8');
+  circ(g,cx-40,cy+24,10,'#4a2f63'); circ(g,cx+30,cy+24,10,'#4a2f63');
+  line(g,cx-70,cy-40,cx-86,cy-60,OUT,5);
+  L.goods.forEach(gd => {
+    const p = shopPos(gd.i);
+    if(gd.got){
+      const k = 1 - Math.pow(1-gd.fly,3);
+      const slot = L.goods.filter(o => o.got).indexOf(gd);
+      const tx = cx - 40 + slot*40, ty = cy - 46;
+      const x = gd.fx + (tx - gd.fx)*k, y = gd.fy + (ty - gd.fy)*k - Math.sin(k*Math.PI)*80;
+      drawArt(g, gd.k, x, y, s*(1 - k*0.4), { t, color:gd.color });
+    } else {
+      const wx = gd.wob > 0 ? Math.sin(gd.wob*40)*6 : 0;
+      drawArt(g, gd.k, p.x + wx, p.y, s*(gd.k === 'snorkel' ? 0.8 : 0.9), { t, color:gd.color });
+    }
+  });
+  drawArt(g,'carlita', 90, vh - 70, 110, { t });
+  drawParts(g,0,0);
+};
+
+/* ==================================================================== *
+ * LEVEL 5 — SWIM. Gabby, Pandy and Carlita swim through the ice-cold
+ * pool as mermaids. Warm bubbles count; chilly swirls just spin you.
+ * The ice cube floats at the surface — of course it does, ice floats.
+ * ==================================================================== */
+INIT.swim = () => {
+  const c = L.cfg;
+  L.W = Math.max(vw, 1400); L.H = 2000; L.surface = 170;
+  L.me.x = L.W/2; L.me.y = L.H - 200;
+  L.items = []; L.swirls = []; L.decor = []; L.trail = [];
+  for(let i=0;i<c.goal;i++) L.items.push({ x: rand(120, L.W-120), y: rand(L.surface + 260, L.H - 160), got:false, bob:Math.random()*6 });
+  for(let i=0;i<5;i++) L.swirls.push({ x: rand(200, L.W-200), y: rand(L.surface + 300, L.H - 300), ang: Math.random()*TAU, sp: rand(50,90) });
+  for(let i=0;i<20;i++) L.decor.push({ x: rand(0, L.W), y: rand(L.surface+60, L.H) });
+  L.cube = { x: L.W/2, y: L.surface + 10 };
+  L.cubeOpen = false;
+  L.cam.x = clamp(L.me.x - vw/2, 0, Math.max(0, L.W - vw));
+  L.cam.y = clamp(L.me.y - vh/2, 0, Math.max(0, L.H - vh));
+};
+UPDATE.swim = (dt) => {
+  const me = L.me, c = L.cfg;
+  let ax = 0, ay = 0;
+  if(pointer){
+    const tx = pointer.x + L.cam.x, ty = pointer.y + L.cam.y;
+    const d = Math.hypot(tx-me.x, ty-me.y);
+    if(d > 12){ ax = (tx-me.x)/d; ay = (ty-me.y)/d; }
+  }
+  const kv = keyVector();
+  if(kv.dx || kv.dy){ const kl = Math.hypot(kv.dx, kv.dy); ax = kv.dx/kl; ay = kv.dy/kl; }
+  if(L.done){ ax = 0; ay = 0; }
+  const SPEED = 330;
+  me.vx += (ax*SPEED - me.vx) * Math.min(1, dt*4.5);
+  me.vy += (ay*SPEED - me.vy) * Math.min(1, dt*4.5);
+  me.x = clamp(me.x + me.vx*dt, 50, L.W-50);
+  me.y = clamp(me.y + me.vy*dt, L.surface + 60, L.H-50);
+  if(Math.abs(me.vx) > 12) me.face = me.vx > 0 ? 1 : -1;
+  if(me.hurt > 0){ me.hurt -= dt; me.spin *= 0.94; }
+  // friends follow along behind
+  L.trail.unshift({ x:me.x, y:me.y, f:me.face });
+  if(L.trail.length > 60) L.trail.length = 60;
+
+  L.items.forEach(it => {
+    if(it.got) return;
+    it.bob += dt*2;
+    if(dist2(me.x, me.y, it.x, it.y) < 60*60){
+      it.got = true; collect(1);
+      burst(it.x, it.y, 14, '#ffd54f');
+      SFX.chime();
+      if(L.got === c.goal){
+        L.cubeOpen = true;
+        SFX.sparkle();
+        toast('icecube','Nice and toasty!','Now swim up to the ice cube!');
+        speakAs('pandy','We\'re nice and toasty! Now swim up to the ice cube!');
+      }
+    }
+  });
+  L.swirls.forEach(s => {
+    s.ang += rand(-1,1)*dt;
+    s.x += Math.cos(s.ang)*s.sp*dt; s.y += Math.sin(s.ang)*s.sp*dt;
+    if(s.x < 80 || s.x > L.W-80) s.ang = Math.PI - s.ang;
+    if(s.y < L.surface + 200 || s.y > L.H-80) s.ang = -s.ang;
+    if(dist2(me.x, me.y, s.x, s.y) < 55*55){ bumpMe(me.x, me.y); SFX.brr(); }
+  });
+  if(L.cubeOpen && !L.done && dist2(me.x, me.y, L.cube.x, L.cube.y + 60) < 120*120){
+    SFX.magic();
+    burst(L.cube.x, L.cube.y, 40, '#bfe9ff');
+    levelDone(1300);
+  }
+  const tx = clamp(me.x - vw/2, 0, Math.max(0, L.W - vw));
+  const ty = clamp(me.y - vh/2, 0, Math.max(0, L.H - vh));
+  L.cam.x += (tx - L.cam.x) * Math.min(1, dt*5);
+  L.cam.y += (ty - L.cam.y) * Math.min(1, dt*5);
+};
+DRAW.swim = () => {
+  const g = ctx, cam = L.cam, t = L.t;
+  // above the water: MerCat's spa
+  g.fillStyle = '#d4f7f7'; g.fillRect(0,0,vw,L.surface - cam.y);
+  const gr = g.createLinearGradient(0, L.surface - cam.y, 0, L.H - cam.y);
+  gr.addColorStop(0,'#8fe0f6'); gr.addColorStop(.5,'#3a9fd6'); gr.addColorStop(1,'#1a5a96');
+  g.fillStyle = gr; g.fillRect(0, L.surface - cam.y, vw, L.H);
+  // pool tiles on the floor and walls
+  g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 2;
+  for(let x = -(cam.x % 80); x < vw; x += 80){ g.beginPath(); g.moveTo(x, L.surface - cam.y); g.lineTo(x, vh); g.stroke(); }
+  for(let y = L.surface + 80; y < L.H; y += 80){ const yy = y - cam.y; if(yy < -10 || yy > vh+10) continue; g.beginPath(); g.moveTo(0,yy); g.lineTo(vw,yy); g.stroke(); }
+  // surface waves
+  g.fillStyle = 'rgba(255,255,255,.5)';
+  for(let x = -((cam.x + t*30) % 40); x < vw + 40; x += 40){ g.beginPath(); g.arc(x, L.surface - cam.y, 14, 0, Math.PI); g.fill(); }
+  // MerCat cheering from the edge
+  drawArt(g,'mercat', 120 - cam.x*0.2, L.surface - 70 - cam.y, 120, { t });
+  // rising bubbles
+  g.fillStyle = 'rgba(255,255,255,.25)';
+  L.decor.forEach((d,i) => {
+    const y = d.y - ((t*50 + i*40) % (L.H - L.surface));
+    const yy = (y < L.surface ? y + (L.H - L.surface) : y) - cam.y;
+    g.beginPath(); g.arc(d.x - cam.x, yy, 4 + (i%3)*2, 0, TAU); g.fill();
+  });
+  // the ice cube, floating
+  const cubeSize = 230;
+  if(L.cubeOpen){
+    g.fillStyle = 'rgba(255,255,180,' + (0.25 + Math.sin(t*5)*0.15) + ')';
+    g.beginPath(); g.arc(L.cube.x - cam.x, L.cube.y - cam.y + 20, 150, 0, TAU); g.fill();
+  }
+  drawArt(g,'icecube', L.cube.x - cam.x, L.cube.y - cam.y, cubeSize, { t, inside:['catrat','pete'], float:true });
+
+  L.items.forEach(it => { if(!it.got) drawArt(g,'warmbubble', it.x - cam.x, it.y - cam.y + Math.sin(it.bob)*7, 70, { t }); });
+  L.swirls.forEach(s => drawArt(g,'swirl', s.x - cam.x, s.y - cam.y, 80, { t }));
+
+  // friends, following Gabby's path
+  const me = L.me;
+  const p1 = L.trail[Math.min(L.trail.length-1, 18)], p2 = L.trail[Math.min(L.trail.length-1, 36)];
+  if(p2) drawArt(g,'carlita', p2.x - cam.x, p2.y - cam.y + 20, 90, { t, tail:true, snorkel:true, flip:p2.f, rot:Math.sin(t*3)*0.1 });
+  if(p1) drawArt(g,'pandy', p1.x - cam.x, p1.y - cam.y + 10, 80, { t, tail:true, snorkel:true, flip:p1.f, rot:Math.sin(t*3+1)*0.1 });
+  drawArt(g,'gabby', me.x - cam.x, me.y - cam.y, 96, {
+    t, tail:true, snorkel:true, flip: me.face,
+    rot: me.hurt > 0 ? me.spin*me.hurt*0.2 : clamp(me.vx/900, -0.3, 0.3),
+    alpha: me.hurt > 0 ? .85 : 1 });
+  drawParts(g, cam.x, cam.y);
+  // which way to go
+  if(L.cubeOpen && me.y > L.surface + vh*0.6){
+    g.fillStyle = 'rgba(255,255,255,' + (0.5 + Math.sin(t*4)*0.3) + ')';
+    g.font = 'bold 48px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('⬆', vw/2, 130);
+  }
+};
+
+/* ==================================================================== *
+ * LEVEL 6 — MELT. Use the spa science: warm things melt the ice, cold
+ * things bounce off. Drag onto the cube, or just tap.
+ * ==================================================================== */
+const MELT_ITEMS = [
+  { k:'cocoa',     warm:true,  name:'Hot cocoa' },
+  { k:'sun',       warm:true,  name:'Sunshine' },
+  { k:'warmwater', warm:true,  name:'Warm spa water' },
+  { k:'cookies',   warm:true,  name:'Warm cookies from Cakey\'s oven' },
+  { k:'snowball',  warm:false, name:'A snowball' },
+  { k:'popsicle',  warm:false, name:'A popsicle' },
+  { k:'snowman',   warm:false, name:'A snowman' }
+];
+INIT.melt = () => {
+  L.tray = shuffle(MELT_ITEMS).map((m,i) => Object.assign({ i, used:false, tried:false, x:0, y:0, fly:null, wob:0 }, m));
+  L.melt = 0; L.drag = null; L.cracked = 0;
+  meltLayout();
+};
+function meltLayout(){
+  L.cube = { x: vw/2, y: Math.max(200, vh*0.36), size: Math.min(vw*0.6, vh*0.42) };
+  const n = L.tray.length;
+  const twoRows = vw < 640;
+  const perRow = twoRows ? 4 : n;
+  L.isz = clamp(Math.min(vw/(perRow+0.4), vh*0.16), 64, 140);
+  L.tray.forEach((m,i) => {
+    const row = twoRows ? Math.floor(i/4) : 0, col = twoRows ? i%4 : i;
+    const inRow = twoRows ? (row === 0 ? 4 : n-4) : n;
+    m.hx = vw*(col+0.5)/inRow;
+    m.hy = vh - (twoRows ? (row === 0 ? 2.1 : 0.95) : 1.0)*L.isz*1.05;
+    if(!m.fly && L.drag?.item !== m){ m.x = m.hx; m.y = m.hy; }
+  });
+}
+function meltFind(x, y){
+  let best = null, bd = (L.isz*0.6)**2;
+  L.tray.forEach(m => { if(m.used || m.fly) return; const d = dist2(x,y,m.x,m.y); if(d < bd){ bd = d; best = m; } });
+  return best;
+}
+function meltDown(x, y){
+  if(L.done) return;
+  const m = meltFind(x, y);
+  if(!m) return;
+  L.drag = { item:m, sx:x, sy:y, ox:m.x - x, oy:m.y - y, moved:false };
+  SFX.pop();
+}
+function meltMove(x, y){
+  const d = L.drag; if(!d) return;
+  if(Math.abs(x - d.sx) + Math.abs(y - d.sy) > 12) d.moved = true;
+  d.item.x = x + d.ox; d.item.y = y + d.oy;
+}
+function meltUp(x, y){
+  const d = L.drag; if(!d) return;
+  L.drag = null;
+  const m = d.item, c = L.cube;
+  const onCube = Math.abs(m.x - c.x) < c.size*0.45 && Math.abs(m.y - c.y) < c.size*0.45;
+  if(onCube || !d.moved){
+    m.fly = { fx:m.x, fy:m.y, k:0 };
+  }
+}
+function meltApply(m){
+  const c = L.cube;
+  if(m.warm){
+    m.used = true;
+    L.melt = Math.min(1, L.melt + 1/L.cfg.goal);
+    collect(1);
+    SFX.drip(); setTimeout(()=> SFX.drip(), 180);
+    burst(c.x, c.y + c.size*0.3, 18, '#9fdcff');
+    if(L.got >= L.cfg.goal){
+      SFX.crack();
+      burst(c.x, c.y, 50, '#ffffff');
+      speakAs('story', 'Crack! The ice cube is melting all the way!');
+      L.cracked = 0.001;
+      levelDone(2400);
+    } else {
+      speakAs('mercat', m.name + ' is warm! Warm melts ice. Drip, drip!');
+    }
+  } else {
+    m.tried = true; m.wob = 0.6;
+    m.fly = null; m.x = m.hx; m.y = m.hy;
+    SFX.brr();
+    burst(c.x, c.y, 10, '#ffffff');
+    speakAs('catrat', 'Brrr! ' + m.name + ' is cold! Cold keeps the ice frozen. Try something warm!');
+  }
+}
+UPDATE.melt = (dt) => {
+  meltLayout();
+  L.tray.forEach(m => {
+    if(m.wob > 0) m.wob -= dt;
+    if(m.fly){
+      m.fly.k = Math.min(1, m.fly.k + dt*2.2);
+      const k = 1 - Math.pow(1 - m.fly.k, 2);
+      m.x = m.fly.fx + (L.cube.x - m.fly.fx)*k;
+      m.y = m.fly.fy + (L.cube.y - m.fly.fy)*k - Math.sin(k*Math.PI)*80;
+      if(m.fly.k >= 1){ m.fly = null; meltApply(m); }
+    }
+  });
+  if(L.cracked) L.cracked += dt;
+};
+DRAW.melt = () => {
+  const g = ctx, t = L.t, c = L.cube;
+  backdrop(g, vw, vh, 'spa', t);
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(0, vh - L.isz*(vw < 640 ? 2.8 : 1.7), vw, vh);
+  if(L.cracked){
+    // the cube splits in two and CatRat and Pete pop out
+    const k = Math.min(1, L.cracked/0.8);
+    g.save(); g.globalAlpha = 1 - k;
+    drawArt(g,'icecube', c.x - k*80, c.y, c.size, { t, melt:1 });
+    drawArt(g,'icecube', c.x + k*80, c.y, c.size, { t, melt:1 });
+    g.restore();
+    drawArt(g,'catrat', c.x - c.size*0.22, c.y - k*30, c.size*0.6, { t });
+    drawArt(g,'pete',   c.x + c.size*0.22, c.y - k*30, c.size*0.6, { t });
+  } else {
+    drawArt(g,'icecube', c.x, c.y, c.size, { t, inside:['catrat','pete'], melt:L.melt });
+  }
+  // a little thermometer of progress beside the cube
+  const tx = c.x + c.size*0.62, ty = c.y - c.size*0.35, th = c.size*0.7;
+  if(tx < vw - 20){
+    rrect(g, tx-8, ty, 16, th, 8, '#fff', 2.4);
+    const fill = th*(0.15 + 0.85*L.melt);
+    rrect(g, tx-5, ty + th - fill, 10, fill, 5, '#ff6f4f', 0);
+    circ(g, tx, ty + th + 6, 12, '#ff6f4f', 2.4);
+  }
+  L.tray.forEach(m => {
+    if(m.used) return;
+    const wx = m.wob > 0 ? Math.sin(m.wob*40)*6 : 0;
+    const o = { t, alpha: m.tried && !m.fly && L.drag?.item !== m ? 0.45 : 1 };
+    drawArt(g, m.k, m.x + wx, m.y, L.isz*(m.k === 'snowman' ? 1.05 : 0.95), o);
+  });
+  drawParts(g, 0, 0);
+};
+
+/* ---------------- The loop ------------------------------------------ */
+let lastT = 0;
+function frame(nowMs){
+  requestAnimationFrame(frame);
+  if(!lastT) lastT = nowMs;
+  const dt = Math.min(0.05, (nowMs - lastT)/1000);
+  lastT = nowMs;
+  if(L){
+    L.t += dt;
+    UPDATE[L.kind](dt);
+    updateParts(dt);
+    if(L){ ctx.clearRect(0,0,vw,vh); DRAW[L.kind](); }
+  } else {
+    drawLive(nowMs/1000);
+  }
+}
+requestAnimationFrame(frame);
+
+/* ==================================================================== *
+ * The ending — a Christmas dance party, then clap three times.
+ * ==================================================================== */
+const PARTY_BACK  = ['santa','pete','djcatnip','cakey','pillowcat'];
+const PARTY_FRONT = ['catrat','carlita','gabby','pandy','mercat','babybox'];
+let claps = 0;
+function startFinale(){
+  setPlaying(false);
+  claps = 0;
+  saveProgress(6);
+  document.getElementById('finTitle').textContent = 'Christmas party!';
+  document.getElementById('finText').textContent =
+    'Everybody is safe and sound, and everybody is dancing! Now clap three times!';
+  Array.from(document.getElementById('clapRow').children).forEach(s => s.classList.remove('on'));
+  document.getElementById('clapBtn').hidden = false;
+  document.getElementById('finAgain').hidden = true;
+  document.getElementById('finHome').hidden = true;
+  liveCanvas(document.getElementById('finScene'), (g,w,h,t) => {
+    backdrop(g,w,h,'party',t);
+    const speed = claps >= 3 ? 7 : 5;
+    const bs = Math.min(h*0.42, w/PARTY_BACK.length*1.05), fs = Math.min(h*0.46, w/PARTY_FRONT.length*1.05);
+    PARTY_BACK.forEach((k,i) => {
+      const x = w*(i+0.5)/PARTY_BACK.length, y = h*0.36 - Math.abs(Math.sin(t*speed*0.5 + i))*10;
+      drawArt(g,k,x,y,bs,{ t:t+i, rot:Math.sin(t*3+i)*0.08 });
+      if(k === 'djcatnip') drawArt(g,'turntable',x,y+bs*0.42,bs*0.7,{t});
+    });
+    PARTY_FRONT.forEach((k,i) => {
+      const x = w*(i+0.5)/PARTY_FRONT.length, y = h*0.74 - Math.abs(Math.sin(t*speed*0.5 + i*1.3))*14;
+      drawArt(g,k,x,y,fs*(k === 'carlita' ? 0.85 : 1),{ t:t+i*0.5, rot:Math.sin(t*3.4+i)*0.1 });
+    });
+    if(claps >= 3) confetti(g,w,h,t);
+  });
+  showScreen('finale');
+  SFX.cheer();
+  speakAs('djcatnip', 'Everybody is safe and sound! Let\'s dance! Now clap three times. Clap, clap, clap!');
+}
+document.getElementById('clapBtn').addEventListener('click', () => {
+  const row = document.getElementById('clapRow');
+  if(claps >= 3) return;
+  SFX.clap();
+  row.children[claps].classList.add('on');
+  claps++;
+  if(claps === 3){
+    SFX.cheer();
+    document.getElementById('finTitle').textContent = 'Happily ever after!';
+    document.getElementById('finText').textContent =
+      'Gabby got her rainbow bracelet back, she got her cat ears back, and she got CatRat and Pete back. They were all safe and sound, and they lived happily ever after. The end.';
+    document.getElementById('clapBtn').hidden = true;
+    document.getElementById('finAgain').hidden = false;
+    document.getElementById('finHome').hidden = false;
+    speakAs('story', 'Gabby got her rainbow bracelet back, she got her cat ears back, and she got CatRat and Pete back. They were all safe and sound, and they lived happily ever after. The end!');
+  }
+});
+document.getElementById('finAgain').addEventListener('click', () => { SFX.pop(); startChapter(0); });
+document.getElementById('finHome').addEventListener('click', () => { SFX.pop(); goHome(); });
+
+/* ==================================================================== *
+ * Buttons and boot
+ * ==================================================================== */
+function syncSoundButtons(){
+  const label = soundOn ? '🔊' : '🔇';
+  document.getElementById('soundBtn').textContent = label;
+  document.getElementById('soundBtnHome').textContent = label;
+}
+function toggleSound(){
+  soundOn = !soundOn;
+  Store.set('gabby_sound', soundOn ? 'on' : 'off');
+  if(!soundOn) stopSpeaking();
+  syncSoundButtons();
+  if(soundOn){ ensureAudio(); SFX.chime(); }
+}
+document.getElementById('soundBtn').addEventListener('click', toggleSound);
+document.getElementById('soundBtnHome').addEventListener('click', toggleSound);
+document.getElementById('homeBtn').addEventListener('click', () => { SFX.pop(); goHome(); });
+document.getElementById('winHome').addEventListener('click', () => { SFX.pop(); goHome(); });
+document.getElementById('winNext').addEventListener('click', () => { SFX.pop(); nextChapter(); });
+
+document.getElementById('playBtn').addEventListener('click', () => {
+  ensureAudio(); SFX.pop();
+  // "Play" picks up at the first level that has not been finished yet.
+  const next = LEVELS.find(l => l.n > cleared) || LEVELS[0];
+  startChapter(next.start);
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  cleared = 0; unlocked = 1;
+  Store.set('gabby_cleared','0'); Store.set('gabby_unlocked','1');
+  renderMap();
+  SFX.chime();
+  toast('gabby', 'Story reset!', 'Start again from level 1.');
+});
+
+function holdBtn(id, set){
+  const el = document.getElementById(id);
+  const on = (e)=>{ e.preventDefault(); ensureAudio(); set(true); };
+  const off = (e)=>{ e.preventDefault(); set(false); };
+  el.addEventListener('pointerdown', on);
+  el.addEventListener('pointerup', off);
+  el.addEventListener('pointercancel', off);
+  el.addEventListener('pointerleave', off);
+}
+holdBtn('leftBtn',  v => { if(L) L.holdLeft = v; });
+holdBtn('rightBtn', v => { if(L) L.holdRight = v; });
+document.getElementById('jumpBtn').addEventListener('pointerdown', (e) => {
+  e.preventDefault(); ensureAudio(); driveJump();
+});
+
+/* A tiny window into the game for automated play-throughs. */
+window.__gabby = { level: () => L, chapter: () => chapterIdx };
+
+renderMap();
+syncSoundButtons();
+showScreen('home');
+</script>
+</body>
+</html>

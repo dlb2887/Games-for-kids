@@ -16,6 +16,7 @@ fully offline; a couple pull their frameworks from a CDN, so those need internet
 | 🦄 **Unicorn Spanish** | [`unicorn-spanish/`](unicorn-spanish/) | A first-Spanish game for ages ~4: count from uno to cien with three unicorns, and a memory game where every pair is an English card and its Spanish partner. |
 | 🧜‍♀️ **Mermaid Unicorn Ocean** | [`mermaid-unicorn-ocean/`](mermaid-unicorn-ocean/) | A just-for-fun swimming game: steer a mermaid unicorn around a scrolling ocean, collect shells, and shoot arrows at the bags of cookies. No lessons, no losing. |
 | 🔱 **Ariel and the Lost Voice** | [`ariel-lost-voice/`](ariel-lost-voice/) | A six-level story game: Ursula steals Ariel's voice and King Triton's trident, and Ariel can only speak Spanish until you work out what her words mean. Swimming levels, a walking level, the six sisters protecting Prince Eric, and a big clapping ending. |
+| 🧊 **Gabby's Christmas Ice Cube Rescue** | [`gabbys-dollhouse/`](gabbys-dollhouse/) | A six-level Gabby's Dollhouse story: CatRat and Pete the polar bear freeze into an ice cube on Christmas Eve. Find the cat ears, fix the rainbow bracelet, drive to the store, learn spa science with MerCat, swim the icy pool and melt the ice. Every character is hand-drawn on canvas. |
 
 More games will be added as their own folders.
 
@@ -42,7 +43,10 @@ Games-for-kids/
 ├── mermaid-unicorn-ocean/
 │   ├── index.html
 │   └── README.md
-└── ariel-lost-voice/
+├── ariel-lost-voice/
+│   ├── index.html
+│   └── README.md
+└── gabbys-dollhouse/
     ├── index.html
     └── README.md
 ```
